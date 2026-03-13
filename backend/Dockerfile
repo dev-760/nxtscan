@@ -5,7 +5,6 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     fonts-noto-core \
-    fonts-noto-arabic \
     fonts-hosny-amiri \
     && rm -rf /var/lib/apt/lists/*
 
