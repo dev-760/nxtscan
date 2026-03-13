@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlmodel
+psycopg2-binary
+celery
+redis
+dnspython
+httpx
+weasyprint
+supabase
+stripe
+python-dotenv
+shodan
+groq
+beautifulsoup4
+Jinja2
