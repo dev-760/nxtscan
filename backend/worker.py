@@ -6,10 +6,10 @@ from celery.schedules import crontab
 from groq import Groq
 from sqlmodel import Session, create_engine, select
 
-from .config import settings
-from .scanners import run_free_checks, run_pro_checks
-from .reports import generate_arabic_pdf_report
-from .models import Scan, ScanResult, Domain, User
+from config import settings
+from scanners import run_free_checks, run_pro_checks
+from reports import generate_arabic_pdf_report
+from models import Scan, ScanResult, Domain, User
 
 logger = logging.getLogger("nextlab.worker")
 

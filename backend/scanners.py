@@ -11,7 +11,7 @@ import urllib3
 import dns.resolver
 import shodan
 
-from .config import settings
+from config import settings
 
 # Suppress insecure request warnings for compliance scrapers
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

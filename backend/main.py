@@ -13,9 +13,9 @@ from sqlmodel import SQLModel, Session, create_engine, text
 from pydantic import BaseModel, field_validator
 import stripe
 
-from .config import settings
-from .models import User, Domain, Scan, ScanResult, Alert
-from .worker import execute_free_scan, execute_pro_scan, celery_app
+from config import settings
+from models import User, Domain, Scan, ScanResult, Alert
+from worker import execute_free_scan, execute_pro_scan, celery_app
 
 logger = logging.getLogger("nextlab.api")
 
