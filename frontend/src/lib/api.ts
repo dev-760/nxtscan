@@ -17,9 +17,13 @@ async function request<T>(
   const { authToken, ...fetchOptions } = options;
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
   };
+  
+  if (fetchOptions.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
