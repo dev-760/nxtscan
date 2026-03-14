@@ -105,10 +105,14 @@ def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
 
     try:
+        # Identify the algorithm dynamically, defaulting to HS256 if not specified
+        unverified_header = jwt.get_unverified_header(token)
+        alg = unverified_header.get("alg", "HS256")
+        
         payload = jwt.decode(
             token,
             settings.supabase_jwt_secret,
-            algorithms=["HS256"],
+            algorithms=[alg],
             audience="authenticated",
         )
         return payload
