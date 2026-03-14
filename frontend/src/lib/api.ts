@@ -11,17 +11,23 @@ type HttpMethod = 'GET' | 'POST';
 
 async function request<T>(
   path: string,
-  options: RequestInit & { method?: HttpMethod } = {},
+  options: RequestInit & { method?: HttpMethod; authToken?: string } = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const { authToken, ...fetchOptions } = options;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> ?? {}),
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
 
   const res = await fetch(url, {
-    method: options.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-    ...options,
+    method: fetchOptions.method ?? 'GET',
+    headers,
+    ...fetchOptions,
   });
 
   if (!res.ok) {
@@ -62,10 +68,6 @@ export interface ScanPollResult {
   error?: string;
 }
 
-export interface StripeCheckoutSessionResponse {
-  url?: string;
-}
-
 export function startFreeScan(domain: string) {
   return request<FreeScanStartResponse>(`/scans/free?domain=${encodeURIComponent(domain)}`, {
     method: 'POST',
@@ -80,22 +82,9 @@ export function getScanPdfUrl(taskId: string) {
   return `${API_BASE_URL}/scans/pdf/${taskId}`;
 }
 
-export function createStripeCheckoutSession(payload: {
-  user_id: string;
-  email: string;
-}) {
-  return request<StripeCheckoutSessionResponse>(
-    '/stripe/create-checkout-session',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function triggerProScan(domain: string, domainId: string) {
+export function triggerProScan(domain: string, domainId: string, accessToken: string) {
   return request<unknown>(
     `/scans/pro?domain=${encodeURIComponent(domain)}&domain_id=${encodeURIComponent(domainId)}`,
-    { method: 'POST' },
+    { method: 'POST', authToken: accessToken },
   );
 }

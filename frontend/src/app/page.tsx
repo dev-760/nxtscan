@@ -28,7 +28,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import {
-  createStripeCheckoutSession,
   getScanPdfUrl,
   pollScan,
   ScanCheck,
@@ -141,7 +140,6 @@ export default function Home() {
   const [scanUrl, setScanUrl] = useState('');
   const [scanResult, setScanResult] = useState<ScanResultViewModel | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -196,31 +194,6 @@ export default function Home() {
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
-
-  const handleUpgrade = async () => {
-    setIsCheckoutLoading(true);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push('/register');
-      return;
-    }
-
-    try {
-      const data = await createStripeCheckoutSession({
-        user_id: session.user.id,
-        email: session.user.email ?? '',
-      });
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error('Checkout error:', error);
-    }
-    setIsCheckoutLoading(false);
-  };
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -866,10 +839,10 @@ export default function Home() {
             Pricing
           </p>
           <h2 className="text-3xl md:text-5xl font-bold text-primary mb-4 tracking-tight">
-            Transparent Pricing
+            Open Source & Free
           </h2>
           <p className="text-secondary text-lg">
-            Start free. Upgrade as your security needs scale.
+            Self-host the full scanner. No limits, no paywalls.
           </p>
         </motion.div>
 
@@ -937,8 +910,7 @@ export default function Home() {
               </p>
             </div>
             <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-primary">$9</span>
-              <span className="text-secondary mb-1.5 text-sm">/month</span>
+              <span className="text-5xl font-extrabold text-primary">Free</span>
             </div>
             <div className="h-px bg-brand-500/10 mb-8" />
             <ul className="space-y-4 mb-10 text-sm text-primary flex-1 font-medium">
@@ -956,18 +928,13 @@ export default function Home() {
                 </li>
               ))}
             </ul>
-            <button
-              onClick={handleUpgrade}
-              disabled={isCheckoutLoading}
+            <Link
+              href="/register"
               className="w-full py-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-sm transition-all btn-premium flex justify-center items-center gap-2"
             >
-              {isCheckoutLoading ? (
-                <Activity className="w-5 h-5 animate-spin text-white" />
-              ) : (
-                <Shield className="w-4 h-4" />
-              )}
-              {isCheckoutLoading ? 'Processing...' : 'Upgrade Now'}
-            </button>
+              <Shield className="w-4 h-4" />
+              Get Started Free
+            </Link>
           </motion.div>
 
           {/* AGENCY */}

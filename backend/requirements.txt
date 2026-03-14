@@ -8,10 +8,10 @@ dnspython
 requests
 httpx
 weasyprint
-stripe
 python-dotenv
 shodan
 groq
 beautifulsoup4
 Jinja2
 pydantic-settings
+PyJWT[crypto]

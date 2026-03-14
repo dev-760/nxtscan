@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { Providers } from '@/components/Providers';
 import './globals.css';
 
 const inter = Inter({
@@ -45,7 +46,9 @@ export default function RootLayout({
           <div className="absolute top-[40%] right-[20%] w-[30%] h-[30%] bg-brand-400/[0.03] rounded-full blur-[140px]" />
         </div>
 
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <Analytics />
       </body>
     </html>

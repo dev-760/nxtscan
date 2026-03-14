@@ -102,7 +102,13 @@ export default function Dashboard() {
         setScanningDomain(domainStr)
 
         try {
-            await triggerProScan(domainStr, domainId)
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) {
+                router.push('/login')
+                return
+            }
+
+            await triggerProScan(domainStr, domainId, session.access_token)
             setFeedback({
                 type: 'success',
                 message: `Automated intelligence scan queued for ${domainStr}.`,

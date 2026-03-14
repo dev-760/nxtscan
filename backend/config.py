@@ -27,18 +27,15 @@ class Settings(BaseSettings):
         description="Comma-separated list of extra allowed origins.",
     )
 
-    # Stripe
-    stripe_secret_key: str = Field(default="sk_test_mock", alias="STRIPE_SECRET_KEY")
-    stripe_webhook_secret: str = Field(
-        default="whsec_mock", alias="STRIPE_WEBHOOK_SECRET"
-    )
-
     # Redis / Celery
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
     # External services
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     shodan_api_key: str = Field(default="", alias="SHODAN_API_KEY")
+
+    # Supabase JWT verification
+    supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
 
     # Rate limiting
     free_scan_rate_limit: int = Field(

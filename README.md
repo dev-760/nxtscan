@@ -1,106 +1,207 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/user-attachments/assets/nextlab-logo" width="200" alt="NextLab Logo" />
-  <h1>NextLab Security Scanner</h1>
-  <p>An enterprise-grade, localized web security SaaS. Provides instantaneous threat detection, automated Moroccan/International compliance reporting (CNDP & SSL enforcement), and executive PDF distribution.</p>
+  <h1>🛡️ NextLab</h1>
+  <p><strong>Open-source web security scanner with AI-powered remediation, automated monitoring, and executive PDF reports.</strong></p>
+  <p>
+    <a href="#-quick-start">Quick Start</a> •
+    <a href="#-features">Features</a> •
+    <a href="#-architecture">Architecture</a> •
+    <a href="#-deployment">Deployment</a> •
+    <a href="#-contributing">Contributing</a>
+  </p>
 </div>
 
 ---
 
-## 🏗 Architecture & Stack
-**NextLab** is completely decoupled, leveraging serverless logic and asynchronous task queuing for massive scalability.
+## ✨ Features
 
-- **Frontend**: [Next.js 14 (App Router)](https://nextjs.org/) + TailwindCSS + Framer Motion.
-- **Backend**: [FastAPI (Python)](https://fastapi.tiangolo.com/) handling routing and API coordination.
-- **Task Queue**: [Celery](https://docs.celeryq.dev/) executing the heavy scanning operations asynchronously.
-- **AI Engine**: [Groq (Llama 3)](https://groq.com/) translating complex vulnerabilities into rapid, human-readable remediation steps.
-- **PDF Generation**: [WeasyPrint](https://weasyprint.org/) completely configured for standard RTL Arabic layouts.
-- **Database / Auth**: [Supabase](https://supabase.com/).
-- **Message Broker**: [Upstash](https://upstash.com/) (Serverless Redis).
-- **Deployment**: [Vercel](https://vercel.com) (Frontend) & [Northflank](https://northflank.com/) (Backend container).
+- **Instant Threat Detection** — SSL certificate analysis, security headers, DNS validation — no signup required
+- **Deep Infrastructure Scan** — Open port discovery (Shodan), subdomain enumeration, technology fingerprinting
+- **AI Remediation** — Groq-powered (Llama 3) human-readable fix instructions for every finding
+- **Continuous Monitoring** — Automated weekly scans with real-time email alerts
+- **Executive PDF Reports** — Bilingual Arabic & English reports with native RTL typography (WeasyPrint + Amiri font)
+- **Moroccan CNDP Compliance** — Checks for `Numéro d'autorisation CNDP` on public pages
+- **Dashboard** — Manage monitored domains, trigger scans, and view history
 
 ---
 
-## 🚀 Local Development Setup
+## 🏗 Architecture
 
-### 1. Requirements
-Ensure you have the following installed on your machine:
-- `Node.js` (v18+)
-- `Python` (3.11+)
-- Upstash Redis account (or local Redis instance)
-- Groq API Key
+```
+┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+│   Next.js   │────▶│   FastAPI     │────▶│  Celery Worker │
+│  (Vercel)   │     │  (Northflank) │     │  (Northflank)  │
+└─────────────┘     └──────┬───────┘     └───────┬───────┘
+                           │                     │
+                    ┌──────▼───────┐     ┌───────▼───────┐
+                    │   Supabase   │     │  Upstash Redis │
+                    │  (DB + Auth) │     │   (Broker)     │
+                    └──────────────┘     └───────────────┘
+```
 
-### 2. Backend Initialization
-The backend relies on FastAPI and a Celery worker pool to execute the custom intelligence gathering (e.g. SSL 200-day limit enforcement, CNDP scraping).
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 15 (App Router) + Tailwind CSS v4 + Framer Motion |
+| **Backend API** | FastAPI (Python 3.11) |
+| **Task Queue** | Celery + Redis (Upstash) |
+| **AI Engine** | Groq (Llama 3.3 70B) |
+| **PDF Engine** | WeasyPrint with native Arabic RTL support |
+| **Database & Auth** | Supabase (PostgreSQL + Auth + RLS) |
+| **Deployment** | Vercel (frontend) + Northflank (backend container) |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Node.js** 18+
+- **Python** 3.11+
+- **Redis** instance (or [Upstash](https://upstash.com/) free tier)
+- **Supabase** project (free tier works)
+- **Groq** API key (free tier: [console.groq.com](https://console.groq.com))
+
+### 1. Clone & Setup Database
+
+```bash
+git clone https://github.com/YOUR_USERNAME/nextlab.git
+cd nextlab
+```
+
+Run the SQL in `supabase_init.sql` in your Supabase SQL editor to create tables, RLS policies, and the auth trigger.
+
+### 2. Backend
 
 ```bash
 cd backend
 
-# Create and activate virtual environment
+# Create virtual environment
 python -m venv venv
-### Windows
-venv\Scripts\activate
-### Unix/MacOS
-source venv/bin/activate
+# Windows: venv\Scripts\activate
+# Unix:    source venv/bin/activate
 
-# Install requirements
+# Install dependencies
 pip install -r requirements.txt
 
-# Duplicate environment file
+# Configure environment
 cp .env.example .env
-```
-Ensure you fill out the `.env` file with your `GROQ_API_KEY`, `DATABASE_URL` (Supabase), and `REDIS_URL` (Upstash).
+# Edit .env with your credentials (see .env.example for details)
 
-**Run the FastAPI Server:**
-```bash
+# Run the API server
 uvicorn main:app --reload --port 8000
-```
 
-**Run the Celery Worker (in a separate terminal):**
-```bash
-# Windows (requires gevent/eventlet for celery on windows usually, or standard solo pool)
+# In a separate terminal — run the Celery worker
+# Windows:
 celery -A worker.celery_app worker --pool=solo -l info
-# Unix
+# Unix:
 celery -A worker.celery_app worker -l info
 ```
 
-*(Note for Windows: If using WeasyPrint PDF generation locally, ensure [GTK3](https://weasyprint.readthedocs.io/en/latest/install.html#windows) is installed in your system PATH).*
-
-### 3. Frontend Initialization
+### 3. Frontend
 
 ```bash
 cd frontend
 
-# Install Next.js dependencies
+# Install dependencies
 npm install
 
-# Run development server
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your Supabase URL and anon key
+
+# Run dev server
 npm run dev
 ```
-The application will map to `http://localhost:3000`. It automatically proxies API requests pointing to `/scans` into your localhost backend (`:8000`).
+
+Open [http://localhost:3000](http://localhost:3000) — the frontend proxies `/api/*` to the backend automatically.
 
 ---
 
-## 🌐 Deployment Mechanics
+## 🌐 Deployment
 
-### Frontend (Vercel)
-Next.js handles static delivery and proxies automatically. 
-1. Link your repository via Vercel.
-2. Vercel automatically detects `vercel.json` and bridges the `/api/*` rewrite configuration pointing toward your production Northflank URL.
+### Frontend → Vercel
 
-### Backend (Northflank)
-Northflank runs raw Dockerfiles out of the box. 
-1. Link the repository to a new **Northflank Service**, selecting the `/backend` directory.
-2. The provided `Dockerfile` installs `libpango` and `fonts-hosny-amiri` automatically, ensuring the Arabic HTML-to-PDF engine runs perfectly on Alpine/Debian Linux.
-3. Once deployed, boot up a **secondary service/worker** in Northflank pointing to the identical image, but overriding the default command to: `celery -A worker.celery_app worker -l info` so it acts strictly as the background queue consumer.
+1. Import your repo on [Vercel](https://vercel.com)
+2. Set **Root Directory** to `frontend`
+3. Add environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `BACKEND_URL` (your Northflank service URL)
+
+### Backend → Northflank
+
+1. Create a new **Service** on [Northflank](https://northflank.com), pointing to the `/backend` directory
+2. Northflank will auto-detect the `Dockerfile`
+3. Add all env vars from `backend/.env.example`
+4. Create a **second service** (same image) with the command override:
+   ```
+   celery -A worker.celery_app worker -l info
+   ```
+   This runs the Celery worker separately.
+
+### Required Environment Variables
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `DATABASE_URL` | Backend | Supabase **Connection Pooler** URL (IPv4) |
+| `SUPABASE_JWT_SECRET` | Backend | Supabase → Settings → API → JWT Secret |
+| `REDIS_URL` | Backend | Upstash Redis URL (rediss://) |
+| `GROQ_API_KEY` | Backend | Groq API key |
+| `FRONTEND_URL` | Backend | Your Vercel URL (for CORS) |
+| `SHODAN_API_KEY` | Backend | Optional — enables port scanning |
+| `NEXT_PUBLIC_SUPABASE_URL` | Frontend | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Frontend | Supabase anon/public key |
+| `BACKEND_URL` | Frontend | Northflank backend URL |
 
 ---
 
-## 🛡️ Key Features Included
-- **SSL Sentinel Engine**: Handshakes domains and actively enforces the incoming industry standard 200-day maximum validity limit.
-- **Moroccan CNDP Scanner**: Actively scrapes routes for `Numéro d'autorisation CNDP`, verifying local legal compliance on public ledgers.
-- **LPU AI Remediation**: Bypasses typical LLM slowness using Groq’s Lightning Processing Units—generating executive summaries synchronously alongside the API gathering.
-- **Native Arabic Reports**: Bypasses standard encoding errors by directly rendering standard `Amiri` RTL typography into compiled PDFs natively within Python. 
+## 📁 Project Structure
+
+```
+nextlab/
+├── backend/
+│   ├── main.py              # FastAPI app, endpoints, auth
+│   ├── worker.py             # Celery tasks (scan execution)
+│   ├── config.py             # Environment settings
+│   ├── models.py             # SQLModel database models
+│   ├── scanners/             # Individual scan modules
+│   ├── reports/              # PDF report generation
+│   ├── templates/            # HTML templates for reports
+│   ├── Dockerfile            # Production container
+│   ├── requirements.txt      # Python dependencies
+│   └── .env.example          # Environment template
+├── frontend/
+│   ├── src/
+│   │   ├── app/              # Next.js App Router pages
+│   │   ├── components/       # Reusable React components
+│   │   ├── lib/              # API client, utilities
+│   │   └── utils/            # Supabase client setup
+│   ├── public/               # Static assets
+│   ├── next.config.ts        # API proxy rewrites
+│   ├── package.json          # Node dependencies
+│   └── .env.example          # Environment template
+├── supabase_init.sql         # Database schema & RLS policies
+├── .gitignore
+└── README.md
+```
 
 ---
 
-<p align="center">Built with execution speed in mind. © 2026 NextLab.</p>
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+---
+
+<p align="center">Built with ❤️ by NextLab. © 2026</p>

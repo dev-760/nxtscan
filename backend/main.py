@@ -5,13 +5,12 @@ import re
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 from sqlmodel import SQLModel, Session, create_engine, text
-from pydantic import BaseModel, field_validator
-import stripe
+import jwt
 
 from config import settings
 import models  # noqa: F401 — import triggers SQLModel table registration
@@ -82,6 +81,43 @@ def _validate_domain(domain: str) -> str:
     return domain
 
 
+# ── Supabase JWT Authentication ───────────────────────────
+
+def get_current_user(request: Request) -> dict:
+    """Extract and verify the Supabase JWT from the Authorization header.
+    Returns the decoded payload (contains 'sub' = user UUID).
+    """
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header.",
+        )
+
+    token = auth_header[7:]  # strip "Bearer "
+
+    if not settings.supabase_jwt_secret:
+        logger.warning("SUPABASE_JWT_SECRET not set — skipping token verification")
+        # Decode without verifying (dev mode fallback)
+        try:
+            return jwt.decode(token, options={"verify_signature": False})
+        except jwt.DecodeError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired.")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {e}")
+
+
 # ── App lifecycle ─────────────────────────────────────────
 
 @asynccontextmanager
@@ -148,33 +184,45 @@ def root():
         "version": settings.app_version,
     }
 
+# Cache for expensive health sub-checks (avoids DoS via /health)
+_health_cache: dict = {"checks": {"api": "ok"}, "ts": 0.0}
+_HEALTH_TTL = 30  # seconds
+
 
 @app.get("/health")
 def health_check():
     """Health check endpoint for monitoring / load balancers.
     Always returns 200 so Northflank doesn't restart the container.
+    Expensive sub-checks (DB, Redis) are cached for 30s.
     """
-    checks = {"api": "ok"}
+    now = time.time()
 
-    # DB check (optional — don't fail the health check if DB is slow)
-    try:
-        with Session(engine) as session:
-            session.execute(text("SELECT 1"))
-        checks["database"] = "ok"
-    except Exception:
-        checks["database"] = "unreachable"
+    if now - _health_cache["ts"] > _HEALTH_TTL:
+        checks: dict[str, str] = {"api": "ok"}
 
-    # Redis / Celery broker check
-    try:
-        celery_app.control.ping(timeout=2)
-        checks["broker"] = "ok"
-    except Exception:
-        checks["broker"] = "unreachable"
+        # DB check
+        try:
+            with Session(engine) as session:
+                session.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+        except Exception:
+            checks["database"] = "unreachable"
 
-    all_ok = all(v == "ok" for v in checks.values())
+        # Redis / Celery broker check
+        try:
+            celery_app.control.ping(timeout=2)
+            checks["broker"] = "ok"
+        except Exception:
+            checks["broker"] = "unreachable"
+
+        _health_cache["checks"] = checks
+        _health_cache["ts"] = now
+
+    cached = _health_cache["checks"]
+    all_ok = all(v == "ok" for v in cached.values())
     return {
         "status": "healthy" if all_ok else "degraded",
-        "checks": checks,
+        "checks": cached,
     }
 
 
@@ -207,8 +255,48 @@ def trigger_free_scan(domain: str, request: Request):
 
 
 @app.post("/scans/pro")
-def trigger_pro_scan(domain: str, domain_id: str):
-    """Trigger an advanced pro-tier scan. Requires a valid domain_id."""
+def trigger_pro_scan(
+    domain: str,
+    domain_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Trigger an advanced pro-tier scan. Requires authentication.
+    Verifies the caller owns the domain before dispatching.
+    """
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not extract user identity from token.",
+        )
+
+    # Verify the domain belongs to the requesting user
+    try:
+        with Session(engine) as db:
+            row = db.execute(
+                text("SELECT user_id FROM domains WHERE id = :domain_id"),
+                {"domain_id": domain_id},
+            ).first()
+
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Domain not found.",
+                )
+            if str(row[0]) != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not own this domain.",
+                )
+    except HTTPException:
+        raise  # re-raise HTTP exceptions as-is
+    except Exception as e:
+        logger.error("Domain ownership check failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not verify domain ownership.",
+        )
+
     clean_domain = _validate_domain(domain)
     task = execute_pro_scan.delay(clean_domain, domain_id)
     return {
@@ -265,144 +353,3 @@ def download_pdf_report(task_id: str):
         media_type="application/pdf",
         filename=f"NextLab_Report_{domain_slug}.pdf",
     )
-
-
-# ══════════════════════════════════════════════════════════
-#  Stripe Payment Infrastructure
-# ══════════════════════════════════════════════════════════
-
-stripe.api_key = settings.stripe_secret_key
-
-
-class CheckoutRequest(BaseModel):
-    user_id: str
-    email: str
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        if "@" not in v or "." not in v.split("@")[-1]:
-            raise ValueError("Invalid email format")
-        return v.strip().lower()
-
-
-@app.post("/stripe/create-checkout-session")
-def create_checkout_session(payload: CheckoutRequest):
-    """Create a Stripe Checkout session for the Pro subscription."""
-    try:
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            customer_email=payload.email,
-            client_reference_id=payload.user_id,
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {
-                            "name": "NextLab Professional",
-                            "description": "Automated weekly vulnerability scanning & Executive PDF reports.",
-                        },
-                        "unit_amount": 900,  # $9.00
-                        "recurring": {"interval": "month"},
-                    },
-                    "quantity": 1,
-                },
-            ],
-            mode="subscription",
-            success_url=f"{settings.frontend_url.rstrip('/')}/dashboard?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{settings.frontend_url.rstrip('/')}/#pricing",
-        )
-        return {"url": checkout_session.url}
-    except stripe.StripeError as e:
-        logger.error("Stripe error: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Payment error: {e.user_message if hasattr(e, 'user_message') else str(e)}",
-        )
-    except Exception as e:
-        logger.error("Checkout session error: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not create checkout session. Please try again.",
-        )
-
-
-@app.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events (e.g., successful payments)."""
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.stripe_webhook_secret
-        )
-    except stripe.SignatureVerificationError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid webhook signature",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Webhook error: {e}",
-        )
-
-    # Upgrade user on successful checkout
-    if event["type"] == "checkout.session.completed":
-        session_data = event["data"]["object"]
-        supabase_user_id = session_data.get("client_reference_id")
-        stripe_cust_id = session_data.get("customer")
-        stripe_sub_id = session_data.get("subscription")
-
-        if supabase_user_id:
-            try:
-                with Session(engine) as db:
-                    stmt = text(
-                        """
-                        UPDATE public.users
-                        SET plan = :plan,
-                            stripe_customer_id = :customer_id,
-                            stripe_subscription_id = :subscription_id,
-                            updated_at = NOW()
-                        WHERE id = :user_id
-                        """
-                    )
-                    db.execute(
-                        stmt,
-                        {
-                            "plan": "pro",
-                            "customer_id": stripe_cust_id,
-                            "subscription_id": stripe_sub_id,
-                            "user_id": supabase_user_id,
-                        },
-                    )
-                    db.commit()
-                    logger.info("Upgraded user %s to PRO plan", supabase_user_id)
-            except Exception as e:
-                logger.error("Failed to upgrade user %s: %s", supabase_user_id, e)
-
-    # Handle subscription cancellation
-    elif event["type"] == "customer.subscription.deleted":
-        sub_data = event["data"]["object"]
-        stripe_cust_id = sub_data.get("customer")
-
-        if stripe_cust_id:
-            try:
-                with Session(engine) as db:
-                    stmt = text(
-                        """
-                        UPDATE public.users
-                        SET plan = 'free',
-                            stripe_subscription_id = NULL,
-                            updated_at = NOW()
-                        WHERE stripe_customer_id = :customer_id
-                        """
-                    )
-                    db.execute(stmt, {"customer_id": stripe_cust_id})
-                    db.commit()
-                    logger.info("Downgraded customer %s to free plan (subscription cancelled)", stripe_cust_id)
-            except Exception as e:
-                logger.error("Failed to downgrade customer %s: %s", stripe_cust_id, e)
-
-    return {"status": "ok"}
