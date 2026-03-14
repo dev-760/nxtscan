@@ -257,7 +257,7 @@ def trigger_free_scan(domain: str, request: Request):
 @app.post("/scans/pro")
 def trigger_pro_scan(
     domain: str,
-    domain_id: str,
+    domain_id: int,
     user: dict = Depends(get_current_user),
 ):
     """Trigger an advanced pro-tier scan. Requires authentication.
@@ -298,7 +298,15 @@ def trigger_pro_scan(
         )
 
     clean_domain = _validate_domain(domain)
-    task = execute_pro_scan.delay(clean_domain, domain_id)
+    try:
+        task = execute_pro_scan.delay(clean_domain, str(domain_id))
+    except Exception as e:
+        logger.error("Failed to queue pro scan: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to connect to task queue. Please try again later.",
+        )
+
     return {
         "status": "queued",
         "message": "Pro scan dispatched",
