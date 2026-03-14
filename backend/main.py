@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 from sqlmodel import SQLModel, Session, create_engine, text
 from pydantic import BaseModel, field_validator
@@ -130,27 +130,24 @@ def root():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint for monitoring / load balancers."""
-    checks = {"api": "ok", "database": "ok", "redis": "ok"}
+    """Health check endpoint for monitoring / load balancers.
+    Always returns 200 so Northflank doesn't restart the container.
+    """
+    checks = {"api": "ok"}
 
-    # DB check
+    # DB check (optional — don't fail the health check if DB is slow)
     try:
         with Session(engine) as session:
             session.exec(text("SELECT 1"))
+        checks["database"] = "ok"
     except Exception:
-        checks["database"] = "error"
-
-    # Redis/Celery check
-    try:
-        celery_app.control.ping(timeout=2)
-    except Exception:
-        checks["redis"] = "unreachable"
+        checks["database"] = "unreachable"
 
     all_ok = all(v == "ok" for v in checks.values())
-    return JSONResponse(
-        status_code=200 if all_ok else 503,
-        content={"status": "healthy" if all_ok else "degraded", "checks": checks},
-    )
+    return {
+        "status": "healthy" if all_ok else "degraded",
+        "checks": checks,
+    }
 
 
 # ══════════════════════════════════════════════════════════

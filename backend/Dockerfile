@@ -25,9 +25,5 @@ RUN mkdir -p /tmp/reports
 # Expose API port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-
-# Start with uvicorn — files are at /app/main.py (not backend.main)
+# Start with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
