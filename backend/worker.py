@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 
 from celery import Celery
 from celery.schedules import crontab
@@ -15,7 +16,22 @@ logger = logging.getLogger("nextlab.worker")
 
 # ── Clients ───────────────────────────────────────────────
 groq_client = Groq(api_key=settings.groq_api_key) if settings.groq_api_key else None
-db_engine = create_engine(settings.database_url)
+
+_db_url = settings.database_url
+_worker_engine_kwargs: dict = {}
+if not _db_url.startswith("sqlite"):
+    _worker_engine_kwargs.update(
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=3,
+        max_overflow=5,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=60000",  # 60s for long pro scans
+        },
+    )
+
+db_engine = create_engine(_db_url, **_worker_engine_kwargs)
 
 # ── Celery ────────────────────────────────────────────────
 REDIS_URL = settings.redis_url
@@ -169,8 +185,6 @@ def _save_scan_to_db(domain_id: str, ai_summary: str, pdf_path: str | None, scan
     """Persist scan results to the database."""
     try:
         with Session(db_engine) as session:
-            from datetime import datetime, timezone
-
             db_scan = Scan(
                 domain_id=int(domain_id),
                 triggered_by="user",

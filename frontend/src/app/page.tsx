@@ -146,7 +146,9 @@ export default function Home() {
   const [scanStep, setScanStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [navHidden, setNavHidden] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const lastScrollY = useRef(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const scanStepRef = useRef<NodeJS.Timeout | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -154,11 +156,20 @@ export default function Home() {
   const router = useRouter();
   const supabase = createClient();
 
-  /* Track scroll for sticky nav and back-to-top */
+  /* Track scroll for sticky nav (hide on scroll down, show on scroll up) */
   useEffect(() => {
     const onScroll = () => {
-      setScrolled(window.scrollY > 40);
-      setShowScrollTop(window.scrollY > 600);
+      const currentY = window.scrollY;
+      setScrolled(currentY > 40);
+      setShowScrollTop(currentY > 600);
+
+      // Hide nav when scrolling down, show when scrolling up
+      if (currentY > 100) {
+        setNavHidden(currentY > lastScrollY.current && currentY - lastScrollY.current > 5);
+      } else {
+        setNavHidden(false);
+      }
+      lastScrollY.current = currentY;
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -283,7 +294,7 @@ export default function Home() {
           scrolled
             ? 'nav-glass py-3 shadow-lg shadow-black/20'
             : 'py-5 bg-transparent'
-        }`}
+        } ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}
       >
         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
           <Logo />

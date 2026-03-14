@@ -59,11 +59,6 @@ class Settings(BaseSettings):
         ]
         return [self.frontend_url.rstrip("/"), *extra]
 
-    def _normalize_db_url(self) -> str:
-        if self.database_url.endswith(".db") and "://" not in self.database_url:
-            return f"sqlite:///{self.database_url}"
-        return self.database_url
-
     model_config = {
         "env_file": os.getenv("ENV_FILE", ".env"),
         "env_file_encoding": "utf-8",

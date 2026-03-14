@@ -108,6 +108,7 @@ export default function Dashboard() {
                 message: `Automated intelligence scan queued for ${domainStr}.`,
             })
         } catch (err) {
+            console.error('Scan trigger failed:', err)
             setFeedback({
                 type: 'error',
                 message: 'Scan request failed. Please try again in a moment.',

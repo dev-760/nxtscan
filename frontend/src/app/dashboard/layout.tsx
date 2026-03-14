@@ -13,7 +13,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    const [user, setUser] = useState<any>(null)
+    const [user, setUser] = useState<{ email?: string } | null>(null)
     const [loading, setLoading] = useState(true)
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const router = useRouter()
@@ -21,11 +21,11 @@ export default function DashboardLayout({
 
     useEffect(() => {
         const checkUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
                 router.push('/login')
             } else {
-                setUser(session.user)
+                setUser(user)
             }
             setLoading(false)
         }
@@ -33,9 +33,11 @@ export default function DashboardLayout({
         checkUser()
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
-            (event, session) => {
+            (_event, session) => {
                 if (!session) {
                     router.push('/login')
+                } else {
+                    setUser(session.user)
                 }
             }
         )

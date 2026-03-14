@@ -14,13 +14,30 @@ from pydantic import BaseModel, field_validator
 import stripe
 
 from config import settings
-from models import User, Domain, Scan, ScanResult, Alert
+import models  # noqa: F401 — import triggers SQLModel table registration
 from worker import execute_free_scan, execute_pro_scan, celery_app
 
 logger = logging.getLogger("nextlab.api")
 
 # ── Database ──────────────────────────────────────────────
-engine = create_engine(settings.database_url, echo=settings.sql_echo)
+_db_url = settings.database_url
+_is_sqlite = _db_url.startswith("sqlite")
+
+_engine_kwargs: dict = {"echo": settings.sql_echo}
+
+if not _is_sqlite:
+    _engine_kwargs.update(
+        pool_pre_ping=True,        # Auto-reconnect stale connections
+        pool_recycle=300,           # Recycle every 5 min (Supabase idle timeout)
+        pool_size=5,
+        max_overflow=10,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000",
+        },
+    )
+
+engine = create_engine(_db_url, **_engine_kwargs)
 
 # ── Domain validation ─────────────────────────────────────
 DOMAIN_REGEX = re.compile(
@@ -71,7 +88,11 @@ def _validate_domain(domain: str) -> str:
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle handler."""
     logger.info("NextLab API v%s starting up...", settings.app_version)
-    SQLModel.metadata.create_all(engine)
+    try:
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database tables verified.")
+    except Exception as exc:
+        logger.error("Database unreachable at startup — tables not synced: %s", exc)
     yield
     logger.info("NextLab API shutting down.")
 
@@ -138,10 +159,17 @@ def health_check():
     # DB check (optional — don't fail the health check if DB is slow)
     try:
         with Session(engine) as session:
-            session.exec(text("SELECT 1"))
+            session.execute(text("SELECT 1"))
         checks["database"] = "ok"
     except Exception:
         checks["database"] = "unreachable"
+
+    # Redis / Celery broker check
+    try:
+        celery_app.control.ping(timeout=2)
+        checks["broker"] = "ok"
+    except Exception:
+        checks["broker"] = "unreachable"
 
     all_ok = all(v == "ok" for v in checks.values())
     return {
@@ -340,7 +368,7 @@ async def stripe_webhook(request: Request):
                         WHERE id = :user_id
                         """
                     )
-                    db.exec(
+                    db.execute(
                         stmt,
                         {
                             "plan": "pro",
@@ -371,7 +399,7 @@ async def stripe_webhook(request: Request):
                         WHERE stripe_customer_id = :customer_id
                         """
                     )
-                    db.exec(stmt, {"customer_id": stripe_cust_id})
+                    db.execute(stmt, {"customer_id": stripe_cust_id})
                     db.commit()
                     logger.info("Downgraded customer %s to free plan (subscription cancelled)", stripe_cust_id)
             except Exception as e:
