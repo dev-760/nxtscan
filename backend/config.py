@@ -2,42 +2,52 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import AnyHttpUrl, BaseSettings, Field, validator
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 class Settings(BaseSettings):
-    app_name: str = "NextScan API"
-    app_version: str = "1.0.0"
+    app_name: str = "NextLab API"
+    app_version: str = "2.0.0"
 
     # Database
     database_url: str = Field(
-        default="sqlite:///./scan.db", env="DATABASE_URL"
+        default="sqlite:///./scan.db", alias="DATABASE_URL"
     )
-    sql_echo: bool = Field(default=False, env="SQL_ECHO")
+    sql_echo: bool = Field(default=False, alias="SQL_ECHO")
 
     # Frontend / CORS
-    frontend_url: AnyHttpUrl = Field(
+    frontend_url: str = Field(
         default="http://localhost:3000",
-        env="FRONTEND_URL",
+        alias="FRONTEND_URL",
     )
     additional_cors_origins: str = Field(
         default="",
-        env="CORS_EXTRA_ORIGINS",
+        alias="CORS_EXTRA_ORIGINS",
         description="Comma-separated list of extra allowed origins.",
     )
 
     # Stripe
-    stripe_secret_key: str = Field(default="sk_test_mock", env="STRIPE_SECRET_KEY")
+    stripe_secret_key: str = Field(default="sk_test_mock", alias="STRIPE_SECRET_KEY")
     stripe_webhook_secret: str = Field(
-        default="whsec_mock", env="STRIPE_WEBHOOK_SECRET"
+        default="whsec_mock", alias="STRIPE_WEBHOOK_SECRET"
     )
 
     # Redis / Celery
-    redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
     # External services
-    groq_api_key: str = Field(default="", env="GROQ_API_KEY")
-    shodan_api_key: str = Field(default="", env="SHODAN_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    shodan_api_key: str = Field(default="", alias="SHODAN_API_KEY")
+
+    # Rate limiting
+    free_scan_rate_limit: int = Field(
+        default=10, alias="FREE_SCAN_RATE_LIMIT",
+        description="Max free scans per IP per hour",
+    )
+
+    # AI model
+    ai_model: str = Field(default="llama-3.3-70b-versatile", alias="AI_MODEL")
 
     @property
     def cors_origins(self) -> List[str]:
@@ -47,22 +57,23 @@ class Settings(BaseSettings):
             for o in self.additional_cors_origins.split(",")
             if o.strip()
         ]
-        # Normalize FRONTEND_URL without trailing slash
         return [self.frontend_url.rstrip("/"), *extra]
 
-    @validator("database_url")
-    def _normalize_db_url(cls, v: str) -> str:
-        # Allow short-form sqlite paths like "scan.db"
-        if v.endswith(".db") and "://" not in v:
-            return f"sqlite:///{v}"
-        return v
+    def _normalize_db_url(self) -> str:
+        if self.database_url.endswith(".db") and "://" not in self.database_url:
+            return f"sqlite:///{self.database_url}"
+        return self.database_url
+
+    model_config = {
+        "env_file": os.getenv("ENV_FILE", ".env"),
+        "env_file_encoding": "utf-8",
+        "populate_by_name": True,
+    }
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    # Single cached instance per process
-    return Settings(_env_file=os.getenv("ENV_FILE", None))
+    return Settings()
 
 
 settings = get_settings()
-

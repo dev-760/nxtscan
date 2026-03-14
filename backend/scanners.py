@@ -1,210 +1,362 @@
 import ssl
 import socket
 from datetime import datetime, timezone
+from typing import Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 from bs4 import BeautifulSoup
 import re
 import urllib3
 import dns.resolver
+import shodan
 
-# Suppress insecure request warnings for CNDP scraper when connecting to misconfigured domains
+from .config import settings
+
+# Suppress insecure request warnings for compliance scrapers
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def check_ssl(domain: str) -> dict:
+# ── Shared constants ──────────────────────────────────────
+REQUEST_TIMEOUT = 8
+HTTP_HEADERS = {"User-Agent": "NextLab/2.0 Security Scanner (https://nextlab.ma)"}
+DANGEROUS_PORTS = frozenset({21, 22, 23, 25, 445, 1433, 3306, 3389, 5432, 5900, 6379, 27017})
+
+# ── Type alias ────────────────────────────────────────────
+ScanCheckResult = Dict[str, str]
+
+
+def _make_result(check_name: str, status: str, severity: str, detail: str) -> ScanCheckResult:
+    """Standardized result builder to avoid typo-prone dict construction."""
+    return {
+        "check_name": check_name,
+        "status": status,
+        "severity": severity,
+        "detail": detail,
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  SSL Certificate Analysis
+# ══════════════════════════════════════════════════════════
+
+def check_ssl(domain: str) -> ScanCheckResult:
     """
-    Check the SSL certificate properties.
-    Specifically checks if the certificate validity exceeds the 200-day limit.
+    Validates the SSL certificate:
+    - Checks if cert is expired
+    - Warns if cert validity exceeds 200 days (stricter posture)
+    - Reports days remaining
     """
+    check = "SSL Certificate"
     try:
         context = ssl.create_default_context()
         context.check_hostname = True
-        
-        with socket.create_connection((domain, 443), timeout=10) as sock:
+
+        with socket.create_connection((domain, 443), timeout=REQUEST_TIMEOUT) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
                 cert = ssock.getpeercert()
-                
-        not_before = datetime.strptime(cert['notBefore'], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-        not_after = datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-        
+
+        not_before = datetime.strptime(cert["notBefore"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+        not_after = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+
         validity_days = (not_after - not_before).days
         days_remaining = (not_after - datetime.now(timezone.utc)).days
-        
-        # SSL Sentinel Logic: Enforcing 200-day limit validation
-        if validity_days > 200:
-            status = "fail"
-            detail = f"Violation: Certificate lifespan ({validity_days} days) exceeds the strict 200-day maximum validity limit."
-        elif days_remaining < 0:
-            status = "fail"
-            detail = f"Violation: Certificate expired {abs(days_remaining)} days ago."
+
+        issuer_parts = dict(x[0] for x in cert.get("issuer", []))
+        issuer = issuer_parts.get("organizationName", "Unknown CA")
+
+        if days_remaining < 0:
+            return _make_result(check, "fail", "critical",
+                                f"Certificate expired {abs(days_remaining)} days ago. Issuer: {issuer}")
+        elif days_remaining < 14:
+            return _make_result(check, "warning", "high",
+                                f"Certificate expires in {days_remaining} days! Renew immediately. Issuer: {issuer}")
+        elif validity_days > 200:
+            return _make_result(check, "warning", "medium",
+                                f"Certificate lifespan ({validity_days} days) exceeds 200-day best practice. "
+                                f"{days_remaining} days remaining. Issuer: {issuer}")
         else:
-            status = "pass"
-            detail = f"Valid: Certificate complies with duration limits. {days_remaining} days remaining (Total: {validity_days} days)."
-            
-        return {
-            "check_name": "SSL Sentinel (200-day limit)",
-            "status": status,
-            "severity": "high" if status == "fail" else "info",
-            "detail": detail
-        }
+            return _make_result(check, "pass", "info",
+                                f"Valid for {days_remaining} more days (total {validity_days} days). Issuer: {issuer}")
+
+    except ssl.SSLCertVerificationError as e:
+        return _make_result(check, "fail", "critical", f"SSL verification failed: {e}")
+    except socket.timeout:
+        return _make_result(check, "fail", "high", "Connection timed out on port 443")
     except Exception as e:
-        return {"check_name": "SSL Sentinel (200-day limit)", "status": "fail", "severity": "high", "detail": f"SSL Handshake failed: {str(e)}"}
+        return _make_result(check, "fail", "high", f"SSL handshake failed: {e}")
 
 
-def check_cndp(domain: str) -> dict:
-    """
-    Scrapes the domain homepage and common privacy policy routes
-    looking for CNDP (Commission Nationale de contrôle de la protection des Données) 
-    authorization numbers to ensure Moroccan legal compliance.
-    """
-    search_paths = [
-        "/",
-        "/privacy-policy",
-        "/privacy",
-        "/politique-de-confidentialite",
-        "/mentions-legales",
-        "/terms"
-    ]
-    
-    headers = {"User-Agent": "NextScan/1.0 Privacy Checker (Compliance Verification)"}
-    
-    cndp_found = False
-    details = "Violation: No 'Numéro d'autorisation CNDP' or compliance declaration found on public privacy routes."
-    
-    # Matches variations of "Numéro d'autorisation CNDP" or simple CNDP mentions with IDs
-    cndp_regex = re.compile(r'(Num[eé]ro\s+d[\'’]autorisation\s+CNDP|CNDP\s+N°|CNDP.*?aut\w*).*?(\d+[A-Za-z0-9\-\/]+|\d+)', re.IGNORECASE)
-    
-    for path in search_paths:
-        try:
-            url = f"https://{domain}{path}"
-            # Verify=False to allow checking sites with busted SSLs during compliance check
-            resp = requests.get(url, headers=headers, timeout=5, verify=False) 
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                text_content = soup.get_text(separator=' ', strip=True)
-                
-                match = cndp_regex.search(text_content)
-                if match:
-                    cndp_found = True
-                    details = f"Compliant: CNDP Authorization found on {path} -> {match.group(0)}"
-                    break
-        except requests.exceptions.RequestException:
-            continue
-            
-    return {
-        "check_name": "CNDP Privacy Compliance",
-        "status": "pass" if cndp_found else "warning",
-        "severity": "medium",
-        "detail": details
-    }
+# ══════════════════════════════════════════════════════════
+#  Security Headers
+# ══════════════════════════════════════════════════════════
 
-def check_headers(domain: str) -> dict:
-    """
-    Checks for essential HTTP security headers like HSTS, CSP, and X-Frame-Options.
-    """
+REQUIRED_HEADERS = {
+    "Strict-Transport-Security": "HSTS",
+    "Content-Security-Policy": "CSP",
+    "X-Frame-Options": "X-Frame-Options",
+    "X-Content-Type-Options": "X-Content-Type-Options",
+    "Referrer-Policy": "Referrer-Policy",
+    "Permissions-Policy": "Permissions-Policy",
+}
+
+def check_headers(domain: str) -> ScanCheckResult:
+    """Checks for essential HTTP security headers including HSTS, CSP, X-Frame, and more."""
+    check = "Security Headers"
     try:
-        url = f"https://{domain}"
-        resp = requests.head(url, timeout=5, allow_redirects=True, verify=False)
-        headers_found = []
+        resp = requests.head(
+            f"https://{domain}", timeout=REQUEST_TIMEOUT,
+            allow_redirects=True, verify=False, headers=HTTP_HEADERS,
+        )
+        present = []
         missing = []
-        
-        if "Strict-Transport-Security" in resp.headers:
-            headers_found.append("HSTS")
-        else:
-            missing.append("HSTS")
-            
-        if "Content-Security-Policy" in resp.headers:
-            headers_found.append("CSP")
-        else:
-            missing.append("CSP")
-            
-        if "X-Frame-Options" in resp.headers:
-            headers_found.append("X-Frame-Options")
-        else:
-            missing.append("X-Frame-Options")
 
-        if len(missing) == 0:
-            return {"check_name": "Security Headers", "status": "pass", "severity": "info", "detail": f"All essential headers present: {', '.join(headers_found)}"}
-        elif len(headers_found) == 0:
-            return {"check_name": "Security Headers", "status": "fail", "severity": "high", "detail": "CRITICAL: No essential security headers found."}
+        for header, label in REQUIRED_HEADERS.items():
+            if header in resp.headers:
+                present.append(label)
+            else:
+                missing.append(label)
+
+        score = len(present)
+        total = len(REQUIRED_HEADERS)
+
+        if score == total:
+            return _make_result(check, "pass", "info",
+                                f"All {total} security headers present: {', '.join(present)}")
+        elif score == 0:
+            return _make_result(check, "fail", "high",
+                                f"No security headers found. Missing: {', '.join(missing)}")
         else:
-            return {"check_name": "Security Headers", "status": "warning", "severity": "medium", "detail": f"Missing headers: {', '.join(missing)}. Present: {', '.join(headers_found)}"}
+            return _make_result(check, "warning", "medium",
+                                f"Score: {score}/{total}. Missing: {', '.join(missing)}")
+
+    except requests.Timeout:
+        return _make_result(check, "fail", "high", "Connection timed out")
     except Exception as e:
-        return {"check_name": "Security Headers", "status": "fail", "severity": "high", "detail": f"Could not connect to evaluate headers: {str(e)}"}
+        return _make_result(check, "fail", "high", f"Could not connect: {e}")
 
-def check_dns(domain: str) -> dict:
-    """
-    Checks TXT records for SPF and DMARC configuration to prevent email spoofing.
-    """
-    has_spf = False
-    has_dmarc = False
-    details = []
-    
-    # Check SPF on apex domain
+
+# ══════════════════════════════════════════════════════════
+#  DNS / Email Security (SPF, DMARC, DKIM)
+# ══════════════════════════════════════════════════════════
+
+def check_dns(domain: str) -> ScanCheckResult:
+    """Checks TXT records for SPF, DMARC, and DKIM configuration."""
+    check = "Email Security (SPF/DMARC/DKIM)"
+    found = []
+    missing = []
+
+    # SPF
     try:
-        txt_records = dns.resolver.resolve(domain, 'TXT')
+        txt_records = dns.resolver.resolve(domain, "TXT")
         for record in txt_records:
             if "v=spf1" in str(record):
-                has_spf = True
-                details.append("SPF Found")
+                found.append("SPF")
                 break
+        else:
+            missing.append("SPF")
     except Exception:
-        pass
+        missing.append("SPF")
 
-    # Check DMARC on _dmarc subdomain
+    # DMARC
     try:
-        dmarc_records = dns.resolver.resolve(f"_dmarc.{domain}", 'TXT')
+        dmarc_records = dns.resolver.resolve(f"_dmarc.{domain}", "TXT")
         for record in dmarc_records:
             if "v=DMARC1" in str(record):
-                has_dmarc = True
-                details.append("DMARC Found")
+                found.append("DMARC")
                 break
+        else:
+            missing.append("DMARC")
     except Exception:
-        pass
+        missing.append("DMARC")
 
-    if has_spf and has_dmarc:
-        return {"check_name": "DNS Email Security", "status": "pass", "severity": "info", "detail": "SPF and DMARC are configured perfectly."}
-    elif not has_spf and not has_dmarc:
-        return {"check_name": "DNS Email Security", "status": "fail", "severity": "high", "detail": "Critial: Missing both SPF and DMARC records (Domain is highly vulnerable to phishing/spoofing)."}
+    # DKIM (common selectors)
+    dkim_found = False
+    for selector in ["default", "google", "selector1", "selector2", "k1", "mail"]:
+        try:
+            dns.resolver.resolve(f"{selector}._domainkey.{domain}", "TXT")
+            dkim_found = True
+            found.append(f"DKIM ({selector})")
+            break
+        except Exception:
+            continue
+    if not dkim_found:
+        missing.append("DKIM")
+
+    total = len(found) + len(missing)
+    if not missing:
+        return _make_result(check, "pass", "info",
+                            f"All email security records configured: {', '.join(found)}")
+    elif not found:
+        return _make_result(check, "fail", "high",
+                            f"No email security records found. Missing: {', '.join(missing)}. "
+                            f"Domain is vulnerable to phishing/spoofing.")
     else:
-        missing = "DMARC" if has_spf else "SPF"
-        return {"check_name": "DNS Email Security", "status": "warning", "severity": "medium", "detail": f"Partially configured. Missing: {missing}"}
+        return _make_result(check, "warning", "medium",
+                            f"Partially configured ({len(found)}/{total}). "
+                            f"Present: {', '.join(found)}. Missing: {', '.join(missing)}")
 
-import shodan
-import os
 
-def check_shodan(domain: str) -> dict:
-    """
-    [PRO ONLY] Queries Shodan to find exposed ports and services associated with the domain's IP.
-    """
-    api_key = os.environ.get("SHODAN_API_KEY", "")
+# ══════════════════════════════════════════════════════════
+#  CNDP Moroccan Privacy Compliance
+# ══════════════════════════════════════════════════════════
+
+CNDP_REGEX = re.compile(
+    r"(Num[eé]ro\s+d[\'']autorisation\s+CNDP|CNDP\s+N°|CNDP.*?aut\w*).*?(\d+[A-Za-z0-9\-\/]+|\d+)",
+    re.IGNORECASE,
+)
+
+PRIVACY_PATHS = ["/", "/privacy-policy", "/privacy", "/politique-de-confidentialite", "/mentions-legales", "/terms"]
+
+def check_cndp(domain: str) -> ScanCheckResult:
+    """Scrapes public pages for CNDP authorization numbers (Moroccan data protection compliance)."""
+    check = "CNDP Privacy Compliance"
+
+    for path in PRIVACY_PATHS:
+        try:
+            resp = requests.get(
+                f"https://{domain}{path}",
+                headers=HTTP_HEADERS, timeout=REQUEST_TIMEOUT, verify=False,
+            )
+            if resp.status_code == 200:
+                text_content = BeautifulSoup(resp.text, "html.parser").get_text(separator=" ", strip=True)
+                match = CNDP_REGEX.search(text_content)
+                if match:
+                    return _make_result(check, "pass", "info",
+                                        f"CNDP Authorization found on {path}: {match.group(0)}")
+        except requests.RequestException:
+            continue
+
+    return _make_result(check, "warning", "medium",
+                        "No CNDP authorization number found on public privacy routes.")
+
+
+# ══════════════════════════════════════════════════════════
+#  Shodan Port Scan (Pro Only)
+# ══════════════════════════════════════════════════════════
+
+def check_shodan(domain: str) -> ScanCheckResult:
+    """Queries Shodan for exposed ports and services."""
+    check = "Shodan Port Exposure"
+    api_key = settings.shodan_api_key
     if not api_key:
-        return {"check_name": "Shodan Ports", "status": "info", "severity": "info", "detail": "Shodan API Key missing from infrastructure config."}
-    
+        return _make_result(check, "info", "info", "Shodan API key not configured.")
+
     try:
         ip = socket.gethostbyname(domain)
         api = shodan.Shodan(api_key)
-        
-        # Wrapped in try-except because Shodan throws APIError if IP isn't in their DB
+
         try:
             host = api.host(ip)
             ports = host.get("ports", [])
-            
+            os_info = host.get("os", "Unknown")
+
             if not ports:
-                return {"check_name": "Shodan Ports", "status": "pass", "severity": "info", "detail": "No open ports found by Shodan."}
-            
-            # Highlight dangerous ports (22 SSH, 3389 RDP, 21 FTP, 23 Telnet, 3306/5432 DBs)
-            dangerous = [21, 22, 23, 3389, 3306, 5432, 27017]
-            found_dangerous = [p for p in ports if p in dangerous]
-            
+                return _make_result(check, "pass", "info",
+                                    f"No open ports found. OS: {os_info}. IP: {ip}")
+
+            found_dangerous = [p for p in ports if p in DANGEROUS_PORTS]
             if found_dangerous:
-                return {"check_name": "Shodan Ports", "status": "warning", "severity": "high", "detail": f"Exposed high-risk ports detected: {found_dangerous}. Total open ports: {len(ports)}."}
-            
-            return {"check_name": "Shodan Ports", "status": "pass", "severity": "info", "detail": f"Found open ports: {ports}."}
-            
+                return _make_result(check, "warning", "high",
+                                    f"High-risk ports exposed: {found_dangerous}. "
+                                    f"Total open: {len(ports)} ({sorted(ports)}). IP: {ip}")
+
+            return _make_result(check, "pass", "info",
+                                f"Open ports: {sorted(ports)}. No high-risk services exposed. IP: {ip}")
+
         except shodan.APIError as e:
             if "No information available" in str(e):
-                return {"check_name": "Shodan Ports", "status": "pass", "severity": "info", "detail": "No public footprint found on Shodan."}
-            return {"check_name": "Shodan Ports", "status": "fail", "severity": "medium", "detail": f"Shodan API error: {str(e)}"}
-            
+                return _make_result(check, "pass", "info",
+                                    f"No public footprint on Shodan for {ip}")
+            return _make_result(check, "fail", "medium", f"Shodan API error: {e}")
+
+    except socket.gaierror:
+        return _make_result(check, "fail", "medium", f"DNS resolution failed for {domain}")
     except Exception as e:
-        return {"check_name": "Shodan Ports", "status": "info", "severity": "info", "detail": f"Could not perform Shodan check: {str(e)}"}
+        return _make_result(check, "info", "info", f"Shodan check unavailable: {e}")
+
+
+# ══════════════════════════════════════════════════════════
+#  Technology Fingerprinting (Pro Only)
+# ══════════════════════════════════════════════════════════
+
+TECH_SIGNATURES = {
+    "Next.js": ["__next", "_next/static", "next/router"],
+    "React": ["react", "__REACT_DEVTOOLS"],
+    "WordPress": ["/wp-content/", "/wp-includes/", "wp-json"],
+    "Laravel": ["laravel_session", "XSRF-TOKEN"],
+    "Django": ["csrfmiddlewaretoken", "django"],
+    "Nginx": [],
+    "Apache": [],
+}
+
+def check_tech_fingerprint(domain: str) -> ScanCheckResult:
+    """Attempts to detect web technologies by analyzing response headers and body patterns."""
+    check = "Technology Fingerprint"
+    try:
+        resp = requests.get(
+            f"https://{domain}", timeout=REQUEST_TIMEOUT,
+            verify=False, headers=HTTP_HEADERS, allow_redirects=True,
+        )
+        detected = []
+        body = resp.text.lower()
+
+        # Check server header
+        server = resp.headers.get("Server", "").lower()
+        if "nginx" in server:
+            detected.append("Nginx")
+        elif "apache" in server:
+            detected.append("Apache")
+        elif "cloudflare" in server:
+            detected.append("Cloudflare")
+
+        # Check powered-by
+        powered_by = resp.headers.get("X-Powered-By", "").lower()
+        if powered_by:
+            detected.append(f"X-Powered-By: {powered_by}")
+
+        # Check body patterns
+        for tech, patterns in TECH_SIGNATURES.items():
+            for pattern in patterns:
+                if pattern.lower() in body:
+                    if tech not in detected:
+                        detected.append(tech)
+                    break
+
+        if detected:
+            return _make_result(check, "pass", "info",
+                                f"Detected: {', '.join(detected)}")
+        return _make_result(check, "pass", "info",
+                            "No identifiable technology signatures detected.")
+
+    except Exception as e:
+        return _make_result(check, "info", "info", f"Fingerprinting unavailable: {e}")
+
+
+# ══════════════════════════════════════════════════════════
+#  Scan Orchestration
+# ══════════════════════════════════════════════════════════
+
+def run_free_checks(domain: str) -> list[ScanCheckResult]:
+    """Run all free-tier checks concurrently."""
+    checks = [check_ssl, check_headers, check_dns, check_cndp]
+    return _run_concurrent(domain, checks)
+
+
+def run_pro_checks(domain: str) -> list[ScanCheckResult]:
+    """Run all pro-tier checks concurrently (includes free + advanced)."""
+    checks = [check_ssl, check_headers, check_dns, check_cndp, check_shodan, check_tech_fingerprint]
+    return _run_concurrent(domain, checks)
+
+
+def _run_concurrent(domain: str, checks: list) -> list[ScanCheckResult]:
+    """Execute scan checks concurrently using a thread pool."""
+    results = []
+    with ThreadPoolExecutor(max_workers=len(checks)) as executor:
+        futures = {executor.submit(fn, domain): fn.__name__ for fn in checks}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as e:
+                results.append(_make_result(name, "fail", "medium", f"Internal error: {e}"))
+    return results

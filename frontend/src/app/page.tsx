@@ -2,7 +2,7 @@
 
 import { Logo } from '@/components/Logo';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
   Zap,
@@ -14,15 +14,17 @@ import {
   BellRing,
   Activity,
   CheckCircle2,
-  ChevronRight,
   Fingerprint,
   ScanLine,
   ShieldCheck,
   Eye,
   Menu,
   X,
+  Sparkles,
+  ArrowUp,
+  ChevronDown,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import {
@@ -44,6 +46,7 @@ const features = [
     icon: <Zap className="w-5 h-5" />,
     gradient: 'from-amber-500/20 to-orange-600/20',
     iconColor: 'text-amber-400',
+    iconBg: 'bg-amber-500/10 border-amber-500/20',
   },
   {
     title: 'Deep Infrastructure Scan',
@@ -52,6 +55,7 @@ const features = [
     icon: <Search className="w-5 h-5" />,
     gradient: 'from-cyan-500/20 to-blue-600/20',
     iconColor: 'text-cyan-400',
+    iconBg: 'bg-cyan-500/10 border-cyan-500/20',
   },
   {
     title: 'Continuous Monitoring',
@@ -60,6 +64,7 @@ const features = [
     icon: <BellRing className="w-5 h-5" />,
     gradient: 'from-emerald-500/20 to-green-600/20',
     iconColor: 'text-emerald-400',
+    iconBg: 'bg-emerald-500/10 border-emerald-500/20',
   },
   {
     title: 'Executive PDF Reports',
@@ -68,6 +73,7 @@ const features = [
     icon: <FileCheck className="w-5 h-5" />,
     gradient: 'from-violet-500/20 to-purple-600/20',
     iconColor: 'text-violet-400',
+    iconBg: 'bg-violet-500/10 border-violet-500/20',
   },
 ];
 
@@ -100,6 +106,15 @@ const terminalLines = [
   { text: '[i] Generating AI remediation...', color: 'text-brand-400' },
 ];
 
+const scanSteps = [
+  'Resolving DNS records',
+  'Validating SSL certificate',
+  'Checking security headers',
+  'Scanning open ports',
+  'Analyzing email breaches',
+  'Generating AI report',
+];
+
 /* ─── Animation Variants ──────────────────────────────────── */
 
 const fadeUp = {
@@ -108,7 +123,7 @@ const fadeUp = {
 };
 
 const staggerContainer = {
-  animate: { transition: { staggerChildren: 0.08 } },
+  animate: { transition: { staggerChildren: 0.1 } },
 };
 
 /* ─── Types ───────────────────────────────────────────────── */
@@ -128,17 +143,47 @@ export default function Home() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanStep, setScanStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const scanStepRef = useRef<NodeJS.Timeout | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const supabase = createClient();
 
+  /* Track scroll for sticky nav and back-to-top */
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolled(window.scrollY > 40);
+      setShowScrollTop(window.scrollY > 600);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  /* Cleanup intervals on unmount */
   useEffect(() => {
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-      }
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (scanStepRef.current) clearInterval(scanStepRef.current);
     };
+  }, []);
+
+  /* Smooth scroll for anchor links */
+  const scrollToSection = useCallback((e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const handleUpgrade = async () => {
@@ -172,6 +217,12 @@ export default function Home() {
     setIsScanning(true);
     setScanResult(null);
     setScanError(null);
+    setScanStep(0);
+
+    /* Animate scan steps indicator */
+    scanStepRef.current = setInterval(() => {
+      setScanStep((prev) => (prev < scanSteps.length - 1 ? prev + 1 : prev));
+    }, 4000);
 
     try {
       const domain = normalizeDomain(scanUrl);
@@ -185,10 +236,16 @@ export default function Home() {
 
           if (pollData.status === 'completed' && pollData.result) {
             if (pollRef.current) clearInterval(pollRef.current);
+            if (scanStepRef.current) clearInterval(scanStepRef.current);
             setIsScanning(false);
             setScanResult({ ...pollData.result, task_id: start.task_id });
+            /* Scroll to results after a short delay */
+            setTimeout(() => {
+              resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
           } else if (pollData.status === 'failed') {
             if (pollRef.current) clearInterval(pollRef.current);
+            if (scanStepRef.current) clearInterval(scanStepRef.current);
             setIsScanning(false);
             setScanError(
               'Scan failed: ' + (pollData.error ?? 'Unknown error'),
@@ -196,11 +253,13 @@ export default function Home() {
           }
         } catch {
           if (pollRef.current) clearInterval(pollRef.current);
+          if (scanStepRef.current) clearInterval(scanStepRef.current);
           setIsScanning(false);
           setScanError('Error polling scan status.');
         }
       }, 3000);
     } catch (err) {
+      if (scanStepRef.current) clearInterval(scanStepRef.current);
       const message =
         err instanceof Error
           ? err.message
@@ -211,104 +270,131 @@ export default function Home() {
   };
 
   return (
-    <main className="flex flex-col items-center w-full pb-32 overflow-x-hidden relative">
-      {/* Mesh Grid Background */}
-      <div className="absolute inset-0 w-full h-[180vh] bg-grid-pattern z-0 pointer-events-none opacity-60" />
+    <main className="flex flex-col items-center w-full pb-32 overflow-x-hidden relative scroll-smooth">
+      {/* Dot grid background */}
+      <div className="absolute inset-0 w-full h-[200vh] dot-grid z-0 pointer-events-none opacity-40" />
 
-      {/* ━━━ Navigation ━━━ */}
-      <nav className="w-full max-w-7xl px-6 flex justify-between items-center py-5 relative z-50">
-        <Logo />
+      {/* Mesh Grid pattern overlay */}
+      <div className="absolute inset-0 w-full h-[180vh] bg-grid-pattern z-0 pointer-events-none opacity-50" />
 
-        {/* Desktop links */}
-        <div className="hidden md:flex gap-8 items-center text-sm font-medium text-gray-400">
-          <Link
-            href="#features"
-            className="hover:text-white transition-colors duration-200"
-          >
-            Features
-          </Link>
-          <Link
-            href="#how-it-works"
-            className="hover:text-white transition-colors duration-200"
-          >
-            How it Works
-          </Link>
-          <Link
-            href="#pricing"
-            className="hover:text-white transition-colors duration-200"
-          >
-            Pricing
-          </Link>
-        </div>
+      {/* ━━━ Sticky Navigation ━━━ */}
+      <nav
+        className={`w-full fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? 'nav-glass py-3 shadow-lg shadow-black/20'
+            : 'py-5 bg-transparent'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+          <Logo />
 
-        <div className="flex gap-3 items-center">
-          <Link
-            href="/login"
-            className="hidden sm:block text-gray-300 hover:text-white transition-colors text-sm font-medium px-4 py-2"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/register"
-            className="bg-brand-600 hover:bg-brand-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all btn-premium flex items-center gap-2"
-          >
-            Start Free <ArrowRight className="w-4 h-4" />
-          </Link>
+          {/* Desktop links */}
+          <div className="hidden md:flex gap-8 items-center text-sm font-medium">
+            <a
+              href="#features"
+              onClick={(e) => scrollToSection(e, 'features')}
+              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
+            >
+              Features
+            </a>
+            <a
+              href="#how-it-works"
+              onClick={(e) => scrollToSection(e, 'how-it-works')}
+              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
+            >
+              How it Works
+            </a>
+            <a
+              href="#pricing"
+              onClick={(e) => scrollToSection(e, 'pricing')}
+              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
+            >
+              Pricing
+            </a>
+          </div>
 
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 text-gray-400 hover:text-white transition-colors"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
-          </button>
+          <div className="flex gap-3 items-center">
+            <Link
+              href="/login"
+              className="hidden sm:block text-secondary hover:text-primary transition-colors text-sm font-medium px-4 py-2"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/register"
+              className="bg-brand-500 hover:bg-brand-400 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all btn-premium flex items-center gap-2"
+            >
+              Start Free <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden p-2 text-secondary hover:text-primary transition-colors"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="md:hidden w-full px-6 pb-6 relative z-50"
-        >
-          <div className="glass rounded-2xl p-4 space-y-1">
-            <Link
-              href="#features"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-4 py-3 text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-            >
-              Features
-            </Link>
-            <Link
-              href="#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-4 py-3 text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-            >
-              How it Works
-            </Link>
-            <Link
-              href="#pricing"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-4 py-3 text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-            >
-              Pricing
-            </Link>
-          </div>
-        </motion.div>
-      )}
+      {/* Mobile menu with AnimatePresence */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="md:hidden fixed top-[60px] left-0 right-0 z-50 px-6 pt-2"
+          >
+            <div className="glass-strong rounded-2xl p-4 space-y-1 shadow-2xl">
+              <a
+                href="#features"
+                onClick={(e) => scrollToSection(e, 'features')}
+                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
+              >
+                Features
+              </a>
+              <a
+                href="#how-it-works"
+                onClick={(e) => scrollToSection(e, 'how-it-works')}
+                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
+              >
+                How it Works
+              </a>
+              <a
+                href="#pricing"
+                onClick={(e) => scrollToSection(e, 'pricing')}
+                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
+              >
+                Pricing
+              </a>
+              <div className="border-t border-white/5 pt-3 mt-2">
+                <Link
+                  href="/login"
+                  className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
+                >
+                  Log in
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ━━━ Hero Section ━━━ */}
-      <section className="relative w-full max-w-7xl px-6 mt-16 md:mt-28 flex flex-col items-center text-center z-10">
+      <section className="relative w-full max-w-7xl px-6 mt-24 md:mt-36 flex flex-col items-center text-center z-10">
         {/* Animated status badge */}
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full glass border border-brand-500/20 text-brand-300 text-xs font-semibold uppercase tracking-wider mb-10"
+          className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full glass-strong border border-brand-500/20 text-brand-300 text-xs font-semibold uppercase tracking-wider mb-10"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -321,11 +407,11 @@ export default function Home() {
         <motion.h1
           {...fadeUp}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-white mb-8 leading-[0.95]"
+          className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-primary mb-8 leading-[0.95]"
         >
           Security Intelligence
           <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 via-brand-500 to-brand-600 glow-text">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 via-brand-500 to-brand-700 glow-text">
             Made Simple.
           </span>
         </motion.h1>
@@ -333,7 +419,7 @@ export default function Home() {
         <motion.p
           {...fadeUp}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-base sm:text-lg md:text-xl text-gray-400 max-w-2xl mb-12 font-medium leading-relaxed"
+          className="text-base sm:text-lg md:text-xl text-secondary max-w-2xl mb-12 font-medium leading-relaxed"
         >
           Run instant SSL, DNS, and reputation checks in seconds.
           <br className="hidden sm:block" />
@@ -344,23 +430,25 @@ export default function Home() {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full max-w-2xl relative group mb-16 z-20"
+          className="w-full max-w-2xl relative group mb-8 z-20"
         >
           {/* Glow behind input */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-brand-500/30 via-brand-600/20 to-brand-500/30 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+          <div className="absolute -inset-1 bg-gradient-to-r from-brand-500/25 via-brand-600/15 to-brand-500/25 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
           <form
             onSubmit={handleScan}
-            className="relative glass rounded-2xl flex items-center p-2 shadow-2xl glow-ring"
+            className="relative glass-strong rounded-2xl flex items-center p-2 shadow-2xl glow-ring glow-ring-hover"
           >
-            <ScanLine className="w-5 h-5 text-gray-500 ml-4 mr-2 flex-shrink-0" />
+            <ScanLine className="w-5 h-5 text-tertiary ml-4 mr-2 flex-shrink-0" />
             <input
+              ref={scanInputRef}
               type="text"
               value={scanUrl}
               onChange={(e) => setScanUrl(e.target.value)}
               placeholder="Enter your domain (e.g. example.com)"
-              className="flex-1 bg-transparent border-none outline-none text-white px-2 placeholder-gray-500 text-base font-medium min-w-0"
+              className="flex-1 bg-transparent border-none outline-none text-primary px-2 placeholder-[rgba(244,244,245,0.25)] text-base font-medium min-w-0"
               required
+              disabled={isScanning}
             />
             <button
               type="submit"
@@ -369,7 +457,7 @@ export default function Home() {
                 ${
                   isScanning
                     ? 'bg-brand-900/50 text-brand-300 cursor-not-allowed'
-                    : 'bg-brand-600 hover:bg-brand-500 text-white btn-premium'
+                    : 'bg-brand-500 hover:bg-brand-400 text-white btn-premium'
                 }`}
             >
               {isScanning ? (
@@ -384,7 +472,7 @@ export default function Home() {
             </button>
           </form>
 
-          <div className="mt-4 flex flex-col items-center gap-1.5 text-xs text-gray-500">
+          <div className="mt-4 flex flex-col items-center gap-1.5 text-xs text-tertiary">
             <p className="flex items-center gap-2">
               <Lock className="w-3 h-3" /> No credit card required · Results
               in under 30 seconds
@@ -392,79 +480,168 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* ─── Scan Error ─── */}
-        {scanError && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-2xl glass border border-red-500/20 p-5 rounded-2xl mb-16"
-          >
-            <div className="flex items-start gap-3 text-red-400 text-sm">
-              <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold mb-1">Scan Error</p>
-                <p className="text-red-400/80">{scanError}</p>
+        {/* ─── Scanning Progress ─── */}
+        <AnimatePresence>
+          {isScanning && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              className="w-full max-w-lg mb-10"
+            >
+              <div className="glass-strong rounded-2xl p-6 gradient-border">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                    <Activity className="w-4 h-4 text-brand-400 animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-primary text-sm font-semibold">Scanning in progress</p>
+                    <p className="text-tertiary text-xs">This usually takes 15–25 seconds</p>
+                  </div>
+                </div>
+
+                {/* Progress steps */}
+                <div className="space-y-2.5">
+                  {scanSteps.map((step, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      {i < scanStep ? (
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                      ) : i === scanStep ? (
+                        <div className="w-4 h-4 rounded-full border-2 border-brand-400 border-t-transparent animate-spin flex-shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-white/10 flex-shrink-0" />
+                      )}
+                      <span
+                        className={`text-sm ${
+                          i < scanStep
+                            ? 'text-success'
+                            : i === scanStep
+                              ? 'text-primary font-medium'
+                              : 'text-tertiary'
+                        }`}
+                      >
+                        {step}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar */}
+                <div className="mt-5 h-1 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full"
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${((scanStep + 1) / scanSteps.length) * 100}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── Scan Error ─── */}
+        <AnimatePresence>
+          {scanError && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl glass-strong border border-red-500/20 p-5 rounded-2xl mb-10"
+            >
+              <div className="flex items-start gap-3 text-error text-sm">
+                <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold mb-1">Scan Error</p>
+                  <p className="text-red-400/80">{scanError}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setScanError(null);
+                    scanInputRef.current?.focus();
+                  }}
+                  className="p-1 hover:bg-white/5 rounded-lg transition-colors text-tertiary hover:text-primary"
+                  aria-label="Dismiss error"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ─── Scan Result ─── */}
         {scanResult && (
           <motion.div
+            ref={resultsRef}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="w-full max-w-3xl glass rounded-3xl p-6 md:p-8 text-left mb-16 relative overflow-hidden gradient-border"
+            className="w-full max-w-3xl glass-strong rounded-3xl p-6 md:p-8 text-left mb-16 relative overflow-hidden gradient-border scroll-mt-24"
           >
             {/* Subtle bg accent */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-brand-500/5 rounded-full blur-[80px] pointer-events-none" />
 
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 pb-5 border-b border-white/5 relative z-10">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-1">
-                  <ShieldCheck className="w-5 h-5 text-brand-400" />
-                  Scan Report
+                <h3 className="text-xl font-bold text-primary flex items-center gap-2 mb-1">
+                  <ShieldCheck className="w-5 h-5 text-success" />
+                  Scan Complete
                 </h3>
-                <p className="text-gray-400 font-mono text-sm">
+                <p className="text-secondary font-mono text-sm">
                   {scanResult.domain}
                 </p>
               </div>
-              <a
-                href={getScanPdfUrl(scanResult.task_id)}
-                target="_blank"
-                rel="noreferrer"
-                className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
-              >
-                <FileCheck className="w-4 h-4" /> Download PDF
-              </a>
+              <div className="flex gap-2">
+                <a
+                  href={getScanPdfUrl(scanResult.task_id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
+                >
+                  <FileCheck className="w-4 h-4" /> Download PDF
+                </a>
+                <button
+                  onClick={() => {
+                    setScanResult(null);
+                    setScanUrl('');
+                    scanInputRef.current?.focus();
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium btn-ghost flex items-center gap-2 flex-shrink-0"
+                >
+                  New Scan
+                </button>
+              </div>
             </div>
 
             <div className="space-y-5 relative z-10">
               {/* AI Remediation Section */}
               <div className="glass-surface p-5 rounded-2xl">
                 <h4 className="flex items-center gap-2 text-brand-400 font-semibold text-sm mb-3">
-                  <Zap className="w-4 h-4" /> AI-Powered Remediation
+                  <Sparkles className="w-4 h-4" /> AI-Powered Remediation
                 </h4>
-                <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                <div className="text-secondary text-sm leading-relaxed whitespace-pre-wrap">
                   {scanResult.ai_remediation}
                 </div>
               </div>
 
               {/* Checks Grid */}
               <div>
-                <h4 className="text-white font-semibold text-sm mb-3">
+                <h4 className="text-primary font-semibold text-sm mb-3">
                   Vulnerability Assessment
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {scanResult.scan_data?.map(
                     (check: ScanCheck, i: number) => (
-                      <div
+                      <motion.div
                         key={i}
-                        className="glass-surface p-4 rounded-xl text-sm"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="glass-surface p-4 rounded-xl text-sm hover:border-white/10 transition-colors"
                       >
                         <div className="flex justify-between items-center mb-2">
-                          <span className="font-semibold text-gray-200">
+                          <span className="font-semibold text-primary">
                             {check.check_name}
                           </span>
                           <span
@@ -479,10 +656,10 @@ export default function Home() {
                             {check.status}
                           </span>
                         </div>
-                        <p className="text-gray-500 text-xs leading-relaxed">
+                        <p className="text-tertiary text-xs leading-relaxed">
                           {check.detail}
                         </p>
-                      </div>
+                      </motion.div>
                     ),
                   )}
                 </div>
@@ -490,24 +667,36 @@ export default function Home() {
             </div>
           </motion.div>
         )}
+
+        {/* Scroll indicator */}
+        {!scanResult && !isScanning && !scanError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.5 }}
+            className="mt-6 mb-8"
+           >
+            <ChevronDown className="w-5 h-5 text-tertiary animate-bounce" />
+          </motion.div>
+        )}
       </section>
 
       {/* ━━━ Trust Bar ━━━ */}
       <section className="w-full py-14 overflow-hidden relative mb-24">
         <div className="section-divider mb-12" />
-        <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-[0.25em] mb-10 text-center">
+        <p className="text-tertiary text-[11px] font-semibold uppercase tracking-[0.25em] mb-10 text-center">
           Powered by leading intelligence frameworks
         </p>
 
         <div className="relative">
-          <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+          <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-[#050507] to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-[#050507] to-transparent z-10 pointer-events-none" />
 
-          <div className="flex w-[200%] gap-20 opacity-40 animate-marquee items-center text-gray-400">
+          <div className="flex w-[200%] gap-20 opacity-40 animate-marquee items-center text-secondary">
             {[...trustLogos, ...trustLogos].map((logo, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 text-lg font-semibold font-mono tracking-tight shrink-0 hover:text-white hover:opacity-100 transition-all duration-300"
+                className="flex items-center gap-2.5 text-lg font-semibold font-mono tracking-tight shrink-0 hover:text-primary hover:opacity-100 transition-all duration-300"
               >
                 {logo.icon}
                 {logo.name}
@@ -519,20 +708,20 @@ export default function Home() {
       </section>
 
       {/* ━━━ Features Grid ━━━ */}
-      <section id="features" className="w-full max-w-7xl px-6 mb-32">
+      <section id="features" className="w-full max-w-7xl px-6 mb-32 scroll-mt-24">
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.5 }}
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider mb-4">
-            Capabilities
+          <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center justify-center gap-2">
+            <Sparkles className="w-4 h-4" /> Capabilities
           </p>
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-5 tracking-tight">
+          <h2 className="text-3xl md:text-5xl font-bold text-primary mb-5 tracking-tight">
             Complete Security Posture
           </h2>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
+          <p className="text-secondary text-lg max-w-2xl mx-auto leading-relaxed">
             Everything you need to secure your infrastructure, from header
             checks to deep port scanning and reputation monitoring.
           </p>
@@ -550,22 +739,22 @@ export default function Home() {
               variants={fadeUp}
               transition={{ duration: 0.4 }}
               key={i}
-              className="glass p-7 rounded-2xl hover:border-brand-500/20 transition-all duration-300 card-hover group relative overflow-hidden"
+              className="glass p-7 rounded-2xl hover:border-brand-500/25 transition-all duration-300 card-hover group relative overflow-hidden"
             >
-              {/* Subtle gradient accent */}
+              {/* Subtle gradient accent on hover */}
               <div
                 className={`absolute top-0 right-0 w-40 h-40 bg-gradient-to-br ${feature.gradient} rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`}
               />
 
               <div
-                className={`w-11 h-11 rounded-xl glass-accent flex items-center justify-center mb-5 ${feature.iconColor} relative z-10`}
+                className={`w-11 h-11 rounded-xl flex items-center justify-center mb-5 ${feature.iconColor} ${feature.iconBg} border relative z-10`}
               >
                 {feature.icon}
               </div>
-              <h3 className="text-xl font-bold text-white mb-2 relative z-10">
+              <h3 className="text-xl font-bold text-primary mb-2 relative z-10">
                 {feature.title}
               </h3>
-              <p className="text-gray-400 leading-relaxed text-sm relative z-10">
+              <p className="text-secondary leading-relaxed text-sm relative z-10">
                 {feature.description}
               </p>
             </motion.div>
@@ -574,48 +763,52 @@ export default function Home() {
       </section>
 
       {/* ━━━ How It Works Section ━━━ */}
-      <section id="how-it-works" className="w-full max-w-7xl px-6 mb-32">
-        <div className="glass rounded-3xl overflow-hidden relative gradient-border">
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-600/[0.04] to-transparent pointer-events-none" />
+      <section id="how-it-works" className="w-full max-w-7xl px-6 mb-32 scroll-mt-24">
+        <div className="glass-strong rounded-3xl overflow-hidden relative gradient-border">
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-500/[0.04] to-transparent pointer-events-none" />
 
           <div className="p-8 md:p-14 relative z-10 flex flex-col lg:flex-row gap-12 items-center">
             {/* Text content */}
             <div className="flex-1 space-y-6">
-              <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider">
-                How it Works
+              <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
+                <Activity className="w-4 h-4" /> How it Works
               </p>
-              <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight tracking-tight">
+              <h2 className="text-3xl md:text-4xl font-bold text-primary leading-tight tracking-tight">
                 Lightning-fast
                 <br />
                 intelligence gathering.
               </h2>
-              <p className="text-gray-400 text-base leading-relaxed">
+              <p className="text-secondary text-base leading-relaxed">
                 Our asynchronous scanner queues dozens of checks in parallel.
                 We consolidate data from multiple APIs into a single,
                 comprehensive report.
               </p>
               <ul className="space-y-3">
                 {checkItems.map((item, i) => (
-                  <li
+                  <motion.li
                     key={i}
-                    className="flex items-center gap-3 text-gray-300 text-sm"
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.08 }}
+                    className="flex items-center gap-3 text-secondary text-sm"
                   >
-                    <CheckCircle2 className="text-emerald-500 w-4 h-4 flex-shrink-0" />
+                    <CheckCircle2 className="text-success w-4 h-4 flex-shrink-0" />
                     {item}
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
             </div>
 
             {/* Terminal mockup */}
             <div className="flex-1 w-full">
-              <div className="glass rounded-2xl overflow-hidden shadow-2xl border border-white/5">
+              <div className="glass-strong rounded-2xl overflow-hidden shadow-2xl border border-white/[0.06] animate-glow-pulse">
                 {/* Title bar */}
                 <div className="bg-white/[0.03] px-5 py-3.5 border-b border-white/5 flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-red-500/60" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                   <div className="w-3 h-3 rounded-full bg-green-500/60" />
-                  <span className="text-gray-500 text-xs font-mono ml-3">
+                  <span className="text-tertiary text-xs font-mono ml-3">
                     nextlab-scanner
                   </span>
                 </div>
@@ -637,12 +830,12 @@ export default function Home() {
 
                   {/* Blinking cursor */}
                   <div className="flex items-center gap-0.5 mt-2">
-                    <span className="text-gray-500">$</span>
+                    <span className="text-tertiary">$</span>
                     <span className="w-2 h-4 bg-brand-400 animate-blink ml-1" />
                   </div>
 
                   {/* Bottom fade */}
-                  <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#0c0c12] to-transparent pointer-events-none" />
+                  <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#0d0d10] to-transparent pointer-events-none" />
                 </div>
               </div>
             </div>
@@ -651,7 +844,7 @@ export default function Home() {
       </section>
 
       {/* ━━━ Pricing Section ━━━ */}
-      <section id="pricing" className="w-full max-w-6xl px-6 mb-32">
+      <section id="pricing" className="w-full max-w-6xl px-6 mb-32 scroll-mt-24">
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.5 }}
@@ -661,10 +854,10 @@ export default function Home() {
           <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider mb-4">
             Pricing
           </p>
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+          <h2 className="text-3xl md:text-5xl font-bold text-primary mb-4 tracking-tight">
             Transparent Pricing
           </h2>
-          <p className="text-gray-400 text-lg">
+          <p className="text-secondary text-lg">
             Start free. Upgrade as your security needs scale.
           </p>
         </motion.div>
@@ -678,17 +871,17 @@ export default function Home() {
             className="glass p-8 rounded-3xl h-full flex flex-col card-hover"
           >
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-white mb-1">Hobbyist</h3>
-              <p className="text-gray-500 text-sm">
+              <h3 className="text-lg font-bold text-primary mb-1">Hobbyist</h3>
+              <p className="text-tertiary text-sm">
                 Instant analysis, no account required
               </p>
             </div>
             <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-white">$0</span>
-              <span className="text-gray-500 mb-1.5 text-sm">/forever</span>
+              <span className="text-5xl font-extrabold text-primary">$0</span>
+              <span className="text-tertiary mb-1.5 text-sm">/forever</span>
             </div>
             <div className="h-px bg-white/5 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-gray-300 flex-1">
+            <ul className="space-y-4 mb-10 text-sm text-secondary flex-1">
               {[
                 '1 scan per day',
                 'Basic vulnerability checks',
@@ -696,12 +889,18 @@ export default function Home() {
                 'No signup required',
               ].map((item, i) => (
                 <li key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="text-gray-600 w-4 h-4 flex-shrink-0" />
+                  <CheckCircle2 className="text-tertiary w-4 h-4 flex-shrink-0" />
                   {item}
                 </li>
               ))}
             </ul>
-            <button className="w-full py-3.5 rounded-xl btn-ghost text-white font-medium text-sm">
+            <button
+              onClick={() => {
+                scrollToTop();
+                setTimeout(() => scanInputRef.current?.focus(), 500);
+              }}
+              className="w-full py-3.5 rounded-xl btn-ghost text-primary font-medium text-sm"
+            >
               Start Free Scan
             </button>
           </motion.div>
@@ -711,27 +910,27 @@ export default function Home() {
             {...fadeUp}
             transition={{ duration: 0.4, delay: 0.1 }}
             viewport={{ once: true }}
-            className="relative glass-accent p-8 rounded-3xl border-brand-500/30 shadow-[0_0_60px_rgba(108,79,255,0.08)] z-10 flex flex-col lg:-translate-y-3"
+            className="relative glass-accent p-8 rounded-3xl border-brand-500/30 shadow-[0_0_60px_rgba(124,92,231,0.1)] z-10 flex flex-col lg:-translate-y-3"
           >
             <div className="absolute -top-3.5 left-0 right-0 flex justify-center">
-              <span className="bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg">
+              <span className="bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shimmer">
                 Most Popular
               </span>
             </div>
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-white mb-1">
+              <h3 className="text-lg font-bold text-primary mb-1">
                 Professional
               </h3>
-              <p className="text-gray-400 text-sm">
+              <p className="text-secondary text-sm">
                 Automated monitoring for professionals
               </p>
             </div>
             <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-white">$9</span>
-              <span className="text-gray-400 mb-1.5 text-sm">/month</span>
+              <span className="text-5xl font-extrabold text-primary">$9</span>
+              <span className="text-secondary mb-1.5 text-sm">/month</span>
             </div>
             <div className="h-px bg-brand-500/10 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-gray-200 flex-1 font-medium">
+            <ul className="space-y-4 mb-10 text-sm text-primary flex-1 font-medium">
               {[
                 'Unlimited scans',
                 '15 Advanced security checks',
@@ -768,17 +967,17 @@ export default function Home() {
             className="glass p-8 rounded-3xl h-full flex flex-col card-hover"
           >
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-white mb-1">Agency</h3>
-              <p className="text-gray-500 text-sm">
+              <h3 className="text-lg font-bold text-primary mb-1">Agency</h3>
+              <p className="text-tertiary text-sm">
                 White-label reports for multiple clients
               </p>
             </div>
             <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-white">$29</span>
-              <span className="text-gray-500 mb-1.5 text-sm">/month</span>
+              <span className="text-5xl font-extrabold text-primary">$29</span>
+              <span className="text-tertiary mb-1.5 text-sm">/month</span>
             </div>
             <div className="h-px bg-white/5 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-gray-300 flex-1">
+            <ul className="space-y-4 mb-10 text-sm text-secondary flex-1">
               {[
                 'Up to 10 monitored domains',
                 'White-label PDF branding',
@@ -787,12 +986,12 @@ export default function Home() {
                 'Direct support line',
               ].map((item, i) => (
                 <li key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="text-gray-600 w-4 h-4 flex-shrink-0" />
+                  <CheckCircle2 className="text-tertiary w-4 h-4 flex-shrink-0" />
                   {item}
                 </li>
               ))}
             </ul>
-            <button className="w-full py-3.5 rounded-xl btn-ghost text-white font-medium text-sm">
+            <button className="w-full py-3.5 rounded-xl btn-ghost text-primary font-medium text-sm">
               Contact Sales
             </button>
           </motion.div>
@@ -801,23 +1000,25 @@ export default function Home() {
 
       {/* ━━━ Bottom CTA ━━━ */}
       <section className="w-full max-w-4xl px-6">
-        <div className="glass-accent p-12 md:p-16 rounded-3xl relative overflow-hidden text-center gradient-border">
+        <div className="glass-accent p-12 md:p-16 rounded-3xl relative overflow-hidden text-center gradient-border animate-glow-pulse">
           <div className="absolute inset-0 bg-gradient-to-br from-brand-500/[0.05] to-transparent pointer-events-none" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-brand-500/[0.06] blur-[100px] pointer-events-none" />
 
           <div className="relative z-10">
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-5 tracking-tight">
+            <h2 className="text-3xl md:text-5xl font-bold text-primary mb-5 tracking-tight">
               Securing the web,
               <br />
-              one scan at a time.
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-brand-500">
+                one scan at a time.
+              </span>
             </h2>
-            <p className="text-gray-400 text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
+            <p className="text-secondary text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
               Join hundreds of developers and agencies trusting NextLab to
               monitor their digital perimeter.
             </p>
             <Link
               href="/register"
-              className="inline-flex items-center justify-center bg-brand-600 hover:bg-brand-500 text-white px-8 py-4 rounded-xl font-bold transition-all text-base gap-2 btn-premium"
+              className="inline-flex items-center justify-center bg-brand-500 hover:bg-brand-400 text-white px-8 py-4 rounded-xl font-bold transition-all text-base gap-2 btn-premium"
             >
               Get Started Free <ArrowRight className="w-5 h-5" />
             </Link>
@@ -830,33 +1031,49 @@ export default function Home() {
         <div className="section-divider mb-10" />
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
-            <Logo />
-            <span className="text-gray-600 text-sm">
+            <Logo size="small" />
+            <span className="text-tertiary text-sm">
               © {new Date().getFullYear()} NextLab. All rights reserved.
             </span>
           </div>
-          <div className="flex gap-6 text-sm text-gray-500">
+          <div className="flex gap-6 text-sm text-tertiary">
             <Link
               href="#"
-              className="hover:text-gray-300 transition-colors"
+              className="hover:text-secondary transition-colors"
             >
               Privacy
             </Link>
             <Link
               href="#"
-              className="hover:text-gray-300 transition-colors"
+              className="hover:text-secondary transition-colors"
             >
               Terms
             </Link>
             <Link
               href="#"
-              className="hover:text-gray-300 transition-colors"
+              className="hover:text-secondary transition-colors"
             >
               Contact
             </Link>
           </div>
         </div>
       </footer>
+
+      {/* ━━━ Back to Top Button ━━━ */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={scrollToTop}
+            className="fixed bottom-8 right-8 z-50 w-11 h-11 rounded-xl glass-strong flex items-center justify-center text-secondary hover:text-primary hover:border-brand-500/30 transition-all shadow-lg"
+            aria-label="Scroll to top"
+          >
+            <ArrowUp className="w-5 h-5" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

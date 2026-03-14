@@ -1,7 +1,11 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  'http://localhost:8000';
+/**
+ * All API requests go through the Next.js rewrite proxy at /api/*.
+ * This avoids CORS entirely — the browser sees same-origin requests.
+ *
+ * The rewrite in next.config.ts maps:
+ *   /api/scans/free → https://backend-url/scans/free
+ */
+const API_BASE_URL = '/api';
 
 type HttpMethod = 'GET' | 'POST';
 
@@ -24,7 +28,9 @@ async function request<T>(
     let message = `Request failed with status ${res.status}`;
     try {
       const body = await res.json();
-      if (body && typeof body.message === 'string') {
+      if (body && typeof body.detail === 'string') {
+        message = body.detail;
+      } else if (body && typeof body.message === 'string') {
         message = body.message;
       }
     } catch {
@@ -61,7 +67,7 @@ export interface StripeCheckoutSessionResponse {
 }
 
 export function startFreeScan(domain: string) {
-  return request<FreeScanStartResponse>(`/scans/free?domain=${domain}`, {
+  return request<FreeScanStartResponse>(`/scans/free?domain=${encodeURIComponent(domain)}`, {
     method: 'POST',
   });
 }
@@ -88,8 +94,8 @@ export function createStripeCheckoutSession(payload: {
 }
 
 export function triggerProScan(domain: string, domainId: string) {
-  return request<unknown>(`/scans/pro?domain=${domain}&domain_id=${domainId}`, {
-    method: 'POST',
-  });
+  return request<unknown>(
+    `/scans/pro?domain=${encodeURIComponent(domain)}&domain_id=${encodeURIComponent(domainId)}`,
+    { method: 'POST' },
+  );
 }
-

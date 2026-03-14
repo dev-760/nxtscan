@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, Activity, AlertTriangle, CheckCircle, Globe, Play } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Plus, Activity, AlertTriangle, CheckCircle, Globe, Play, Shield, Trash2, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { triggerProScan } from '@/lib/api'
 import { normalizeDomain } from '@/lib/domain'
 
@@ -44,6 +44,14 @@ export default function Dashboard() {
         ensureSessionAndLoad()
     }, [router, supabase])
 
+    /* Auto-dismiss feedback after 5s */
+    useEffect(() => {
+        if (feedback) {
+            const timer = setTimeout(() => setFeedback(null), 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [feedback])
+
     const fetchDomains = async () => {
         const { data, error } = await supabase.from('domains').select('*').order('created_at', { ascending: false })
         if (data && !error) setDomains(data)
@@ -81,14 +89,18 @@ export default function Dashboard() {
         setIsLoading(false)
     }
 
+    const handleDeleteDomain = async (domainId: string) => {
+        const { error } = await supabase.from('domains').delete().eq('id', domainId)
+        if (!error) {
+            setFeedback({ type: 'success', message: 'Domain removed from monitoring.' })
+            fetchDomains()
+        }
+    }
+
     const handleTriggerScan = async (domainId: string, domainStr: string) => {
         setFeedback(null)
         setScanningDomain(domainStr)
-        // Normally you would pass the JWT Token to the Python backend here to authenticate,
-        // e.g. using `const { data: { session } } = await supabase.auth.getSession();`
-        // const token = session?.access_token;
 
-        // As a simplification for MVP, we just ping the pro endpoint directly.
         try {
             await triggerProScan(domainStr, domainId)
             setFeedback({
@@ -106,95 +118,146 @@ export default function Dashboard() {
 
     if (isAuthLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-gray-400">
+            <div className="min-h-[60vh] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-secondary">
                     <Activity className="w-6 h-6 animate-spin text-brand-400" />
-                    <p>Securing your workspace…</p>
+                    <p className="text-sm font-medium">Securing your workspace…</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="max-w-6xl mx-auto flex flex-col pt-12">
-            <div className="flex justify-between items-end mb-8">
+        <div className="max-w-6xl mx-auto flex flex-col pt-4 md:pt-12">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 mb-8">
                 <div>
-                    <h1 className="text-4xl font-extrabold text-white mb-2">Monitored Perimeters</h1>
-                    <p className="text-gray-400">View and protect your active domains.</p>
+                    <h1 className="text-3xl md:text-4xl font-extrabold text-primary mb-2 tracking-tight">Monitored Perimeters</h1>
+                    <p className="text-secondary text-sm md:text-base">
+                        View and protect your active domains.
+                        {domains.length > 0 && (
+                            <span className="text-tertiary ml-2">({domains.length} domain{domains.length !== 1 ? 's' : ''})</span>
+                        )}
+                    </p>
                 </div>
 
-                <form onSubmit={handleAddDomain} className="flex gap-2 relative">
+                <form onSubmit={handleAddDomain} className="flex gap-2 w-full sm:w-auto">
                     <input
                         type="text"
                         value={newDomain}
                         onChange={(e) => setNewDomain(e.target.value)}
                         placeholder="target.com"
-                        className="bg-[#0f0f12] border border-white/10 rounded-xl px-4 py-2.5 text-white max-w-[200px] outline-none focus:border-brand-500"
+                        className="input-field flex-1 sm:max-w-[200px]"
                     />
                     <button
                         type="submit"
-                        disabled={isLoading}
-                        className="bg-brand-600 hover:bg-brand-500 disabled:bg-brand-900/40 disabled:text-brand-300 text-white rounded-xl px-4 py-2.5 font-bold transition-all flex items-center gap-2 border border-brand-500/50"
+                        disabled={isLoading || !newDomain.trim()}
+                        className="bg-brand-500 hover:bg-brand-400 disabled:bg-brand-900/40 disabled:text-brand-300 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 font-bold transition-all flex items-center gap-2 btn-premium flex-shrink-0"
                     >
-                        <Plus className="w-5 h-5" /> Add
+                        {isLoading ? (
+                            <Activity className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Plus className="w-5 h-5" />
+                        )}
+                        Add
                     </button>
                 </form>
             </div>
 
-            {feedback && (
-                <div
-                    className={`mb-8 rounded-2xl border px-4 py-3 flex items-center gap-3 text-sm ${
-                        feedback.type === 'success'
-                            ? 'border-green-500/40 bg-green-500/10 text-green-300'
-                            : 'border-red-500/40 bg-red-500/10 text-red-300'
-                    }`}
-                >
-                    {feedback.type === 'success' ? (
-                        <CheckCircle className="w-5 h-5 flex-shrink-0" />
-                    ) : (
-                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    )}
-                    <p>{feedback.message}</p>
-                </div>
-            )}
+            {/* Feedback toast */}
+            <AnimatePresence>
+                {feedback && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        className={`mb-8 rounded-2xl border px-4 py-3 flex items-center gap-3 text-sm ${
+                            feedback.type === 'success'
+                                ? 'border-emerald-500/30 bg-emerald-500/8 text-success'
+                                : 'border-red-500/30 bg-red-500/8 text-error'
+                        }`}
+                    >
+                        {feedback.type === 'success' ? (
+                            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                        ) : (
+                            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                        )}
+                        <p className="flex-1">{feedback.message}</p>
+                        <button
+                            onClick={() => setFeedback(null)}
+                            className="p-1 hover:bg-white/5 rounded-lg transition-colors"
+                            aria-label="Dismiss"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {domains.length === 0 ? (
-                <div className="text-center py-20 glass rounded-3xl border border-white/5 border-dashed">
-                    <Globe className="w-16 h-16 text-brand-500/30 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-white mb-2">No infrastructure mapped</h3>
-                    <p className="text-gray-400">Add your first domain above to schedule automated intelligence checks.</p>
-                </div>
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center py-20 glass-strong rounded-3xl border border-dashed border-white/[0.06]"
+                >
+                    <div className="w-16 h-16 rounded-2xl glass-accent flex items-center justify-center mx-auto mb-5">
+                        <Globe className="w-8 h-8 text-brand-500/40" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-primary mb-2">No infrastructure mapped</h3>
+                    <p className="text-secondary max-w-md mx-auto mb-6">Add your first domain above to schedule automated intelligence checks.</p>
+                    <div className="inline-flex items-center gap-2 text-xs text-tertiary bg-white/[0.02] px-4 py-2 rounded-full">
+                        <Shield className="w-3.5 h-3.5" />
+                        Your domains are scanned weekly with 15+ security checks
+                    </div>
+                </motion.div>
             ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {domains.map(d => (
-                        <motion.div
-                            key={d.id}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="glass p-6 rounded-2xl border border-white/5 hover:border-brand-500/30 transition-all flex flex-col group"
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="bg-brand-500/10 p-2.5 rounded-xl border border-brand-500/20">
-                                    <Globe className="w-6 h-6 text-brand-400" />
-                                </div>
-                                <span className="bg-green-500/10 text-green-400 text-xs font-bold px-2 py-1 rounded">Monitoring</span>
-                            </div>
-
-                            <h3 className="text-xl font-bold text-white font-mono break-all leading-tight mb-2">{d.domain}</h3>
-                            <p className="text-gray-500 text-xs mb-8">Added: {new Date(d.created_at).toLocaleDateString()}</p>
-
-                            <div className="mt-auto space-y-3">
+                    <AnimatePresence>
+                        {domains.map((d, i) => (
+                            <motion.div
+                                key={d.id}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="glass p-6 rounded-2xl border border-white/[0.06] hover:border-brand-500/25 transition-all card-hover flex flex-col group relative"
+                            >
+                                {/* Delete button */}
                                 <button
-                                    onClick={() => handleTriggerScan(d.id, d.domain)}
-                                    disabled={scanningDomain === d.domain}
-                                    className="w-full bg-[#161618] hover:bg-brand-500/10 border border-white/5 hover:border-brand-500/30 text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex justify-center items-center gap-2"
+                                    onClick={() => handleDeleteDomain(d.id)}
+                                    className="absolute top-4 right-4 p-1.5 rounded-lg text-tertiary hover:text-error hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                    aria-label={`Remove ${d.domain}`}
                                 >
-                                    {scanningDomain === d.domain ? <Activity className="w-4 h-4 animate-spin text-brand-400" /> : <Play className="w-4 h-4 text-brand-400 group-hover:text-brand-300" />}
-                                    {scanningDomain === d.domain ? 'Dispatching...' : 'Force Manual Scan'}
+                                    <Trash2 className="w-4 h-4" />
                                 </button>
-                            </div>
-                        </motion.div>
-                    ))}
+
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="bg-brand-500/10 p-2.5 rounded-xl border border-brand-500/20">
+                                        <Globe className="w-6 h-6 text-brand-400" />
+                                    </div>
+                                    <span className="badge-pass text-xs font-bold px-2.5 py-1 rounded-lg">Monitoring</span>
+                                </div>
+
+                                <h3 className="text-xl font-bold text-primary font-mono break-all leading-tight mb-2 pr-8">{d.domain}</h3>
+                                <p className="text-tertiary text-xs mb-8">Added: {new Date(d.created_at).toLocaleDateString()}</p>
+
+                                <div className="mt-auto space-y-3">
+                                    <button
+                                        onClick={() => handleTriggerScan(d.id, d.domain)}
+                                        disabled={scanningDomain === d.domain}
+                                        className="w-full glass-surface hover:bg-brand-500/10 border border-white/[0.06] hover:border-brand-500/25 text-primary py-2.5 rounded-xl text-sm font-semibold transition-all flex justify-center items-center gap-2 disabled:cursor-not-allowed"
+                                    >
+                                        {scanningDomain === d.domain ? (
+                                            <Activity className="w-4 h-4 animate-spin text-brand-400" />
+                                        ) : (
+                                            <Play className="w-4 h-4 text-brand-400 group-hover:text-brand-300" />
+                                        )}
+                                        {scanningDomain === d.domain ? 'Dispatching...' : 'Force Manual Scan'}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
                 </div>
             )}
         </div>
