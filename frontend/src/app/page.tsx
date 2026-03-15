@@ -146,6 +146,7 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const lastScrollY = useRef(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const scanStepRef = useRef<NodeJS.Timeout | null>(null);
@@ -180,6 +181,21 @@ export default function Home() {
       if (scanStepRef.current) clearInterval(scanStepRef.current);
     };
   }, []);
+
+  /* Auth User state */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
 
   /* Smooth scroll for anchor links */
   const scrollToSection = useCallback((e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
@@ -577,14 +593,23 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <a
-                  href={getScanPdfUrl(scanResult.task_id)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
-                >
-                  <FileCheck className="w-4 h-4" /> Download PDF
-                </a>
+                {user ? (
+                  <a
+                    href={getScanPdfUrl(scanResult.task_id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
+                  >
+                    <FileCheck className="w-4 h-4" /> Download Report
+                  </a>
+                ) : (
+                  <Link
+                    href={`/login`}
+                    className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
+                  >
+                    <FileCheck className="w-4 h-4" /> Download Report
+                  </Link>
+                )}
                 <button
                   onClick={() => {
                     setScanResult(null);
