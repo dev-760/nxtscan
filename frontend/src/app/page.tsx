@@ -1,8 +1,6 @@
 'use client';
 
-import { Logo } from '@/components/Logo';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
   Zap,
@@ -11,21 +9,16 @@ import {
   FileCheck,
   ArrowRight,
   Lock,
-  BellRing,
   Activity,
   CheckCircle2,
-  Fingerprint,
   ScanLine,
   ShieldCheck,
-  Eye,
   Menu,
   X,
   Sparkles,
-  ArrowUp,
-  ChevronDown,
+  Server
 } from 'lucide-react';
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, FormEvent } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import {
   getScanPdfUrl,
@@ -35,74 +28,30 @@ import {
 } from '@/lib/api';
 import { normalizeDomain } from '@/lib/domain';
 
-/* ─── Data ────────────────────────────────────────────────── */
-
 const features = [
   {
     title: 'Instant Threat Detection',
-    description:
-      'Real-time SSL certificate analysis, security headers validation, and vulnerability detection — no signup required.',
-    icon: <Zap className="w-5 h-5" />,
-    gradient: 'from-amber-500/20 to-orange-600/20',
-    iconColor: 'text-amber-400',
-    iconBg: 'bg-amber-500/10 border-amber-500/20',
+    description: 'Real-time SSL certificate analysis, security headers validation, and vulnerability detection.',
+    icon: <Zap className="w-6 h-6" />,
   },
   {
     title: 'Deep Infrastructure Scan',
-    description:
-      'Discover open ports, enumerate subdomains, and fingerprint technology stacks through secure remote reconnaissance.',
-    icon: <Search className="w-5 h-5" />,
-    gradient: 'from-cyan-500/20 to-blue-600/20',
-    iconColor: 'text-cyan-400',
-    iconBg: 'bg-cyan-500/10 border-cyan-500/20',
-  },
-  {
-    title: 'Continuous Monitoring',
-    description:
-      'Automated weekly scans with instant alerts the moment your security posture changes. Set it and forget it.',
-    icon: <BellRing className="w-5 h-5" />,
-    gradient: 'from-emerald-500/20 to-green-600/20',
-    iconColor: 'text-emerald-400',
-    iconBg: 'bg-emerald-500/10 border-emerald-500/20',
+    description: 'Discover open ports, enumerate subdomains, and fingerprint technology stacks.',
+    icon: <Search className="w-6 h-6" />,
   },
   {
     title: 'Executive PDF Reports',
-    description:
-      'Generate bilingual Arabic & English reports with AI-powered remediation steps, ready for board presentations.',
-    icon: <FileCheck className="w-5 h-5" />,
-    gradient: 'from-violet-500/20 to-purple-600/20',
-    iconColor: 'text-violet-400',
-    iconBg: 'bg-violet-500/10 border-violet-500/20',
+    description: 'Generate bilingual Arabic & English reports with AI-powered remediation steps.',
+    icon: <FileCheck className="w-6 h-6" />,
   },
 ];
 
 const trustLogos = [
-  { name: "Let's Encrypt", icon: <Lock className="w-5 h-5" /> },
-  { name: 'Shodan', icon: <Eye className="w-5 h-5" /> },
-  { name: 'HaveIBeenPwned', icon: <Fingerprint className="w-5 h-5" /> },
-  { name: 'Vercel', icon: <Zap className="w-5 h-5" /> },
-  { name: 'CNDP Maroc', icon: <Globe className="w-5 h-5" /> },
+  { name: 'Cloudflare', icon: <Server className="w-5 h-5" /> },
+  { name: 'Let\'s Encrypt', icon: <Lock className="w-5 h-5" /> },
+  { name: 'Shodan', icon: <Search className="w-5 h-5" /> },
+  { name: 'AWS', icon: <Zap className="w-5 h-5" /> },
   { name: 'Supabase', icon: <Shield className="w-5 h-5" /> },
-];
-
-const checkItems = [
-  'SSL validation & expiration timeline',
-  'DMARC, SPF, and DKIM configuration',
-  'Open port discovery via Shodan',
-  'Dark web breached email correlation',
-  'Security header enforcement',
-  'CNDP regulatory compliance check',
-];
-
-const terminalLines = [
-  { text: '$ nextscan target --domain example.com', color: 'text-gray-300' },
-  { text: '[i] Resolving DNS records... OK', color: 'text-blue-400' },
-  { text: '[+] SSL Certificate valid for 284 days', color: 'text-emerald-400' },
-  { text: '[-] Missing strict-transport-security header', color: 'text-amber-400' },
-  { text: '[+] SPF record configured (~all)', color: 'text-emerald-400' },
-  { text: '[i] Querying Shodan for open ports...', color: 'text-blue-400' },
-  { text: '[+] No breached emails found', color: 'text-emerald-400' },
-  { text: '[i] Generating AI remediation...', color: 'text-brand-400' },
 ];
 
 const scanSteps = [
@@ -114,27 +63,12 @@ const scanSteps = [
   'Generating AI report',
 ];
 
-/* ─── Animation Variants ──────────────────────────────────── */
-
-const fadeUp = {
-  initial: { opacity: 0, y: 24 },
-  animate: { opacity: 1, y: 0 },
-};
-
-const staggerContainer = {
-  animate: { transition: { staggerChildren: 0.1 } },
-};
-
-/* ─── Types ───────────────────────────────────────────────── */
-
 interface ScanResultViewModel {
   task_id: string;
   domain: string;
   ai_remediation: string;
   scan_data?: ScanCheck[];
 }
-
-/* ─── Component ───────────────────────────────────────────── */
 
 export default function Home() {
   const [scanUrl, setScanUrl] = useState('');
@@ -143,38 +77,13 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [navHidden, setNavHidden] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const lastScrollY = useRef(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const scanStepRef = useRef<NodeJS.Timeout | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
   const supabase = createClient();
 
-  /* Track scroll for sticky nav (hide on scroll down, show on scroll up) */
-  useEffect(() => {
-    const onScroll = () => {
-      const currentY = window.scrollY;
-      setScrolled(currentY > 40);
-      setShowScrollTop(currentY > 600);
-
-      // Hide nav when scrolling down, show when scrolling up
-      if (currentY > 100) {
-        setNavHidden(currentY > lastScrollY.current && currentY - lastScrollY.current > 5);
-      } else {
-        setNavHidden(false);
-      }
-      lastScrollY.current = currentY;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  /* Cleanup intervals on unmount */
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -182,7 +91,6 @@ export default function Home() {
     };
   }, []);
 
-  /* Auth User state */
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
@@ -197,21 +105,7 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
 
-  /* Smooth scroll for anchor links */
-  const scrollToSection = useCallback((e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-    e.preventDefault();
-    setMobileMenuOpen(false);
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, []);
-
-  const scrollToTop = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const handleScan = async (e: React.FormEvent) => {
+  const handleScan = async (e: FormEvent) => {
     e.preventDefault();
     if (!scanUrl) return;
     setIsScanning(true);
@@ -219,7 +113,6 @@ export default function Home() {
     setScanError(null);
     setScanStep(0);
 
-    /* Animate scan steps indicator */
     scanStepRef.current = setInterval(() => {
       setScanStep((prev) => (prev < scanSteps.length - 1 ? prev + 1 : prev));
     }, 4000);
@@ -239,7 +132,6 @@ export default function Home() {
             if (scanStepRef.current) clearInterval(scanStepRef.current);
             setIsScanning(false);
             setScanResult({ ...pollData.result, task_id: start.task_id });
-            /* Scroll to results after a short delay */
             setTimeout(() => {
               resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 300);
@@ -247,9 +139,7 @@ export default function Home() {
             if (pollRef.current) clearInterval(pollRef.current);
             if (scanStepRef.current) clearInterval(scanStepRef.current);
             setIsScanning(false);
-            setScanError(
-              'Scan failed: ' + (pollData.error ?? 'Unknown error'),
-            );
+            setScanError('Scan failed: ' + (pollData.error ?? 'Unknown error'));
           }
         } catch {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -270,813 +160,418 @@ export default function Home() {
   };
 
   return (
-    <main className="flex flex-col items-center w-full pb-32 overflow-x-hidden relative scroll-smooth">
-      {/* Dot grid background */}
-      <div className="absolute inset-0 w-full h-[200vh] dot-grid z-0 pointer-events-none opacity-40" />
-
-      {/* Mesh Grid pattern overlay */}
-      <div className="absolute inset-0 w-full h-[180vh] bg-grid-pattern z-0 pointer-events-none opacity-50" />
-
-      {/* ━━━ Sticky Navigation ━━━ */}
-      <nav
-        className={`w-full fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'nav-glass py-3 shadow-lg shadow-black/20'
-            : 'py-5 bg-transparent'
-        } ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}
-      >
-        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-          <Logo />
-
-          {/* Desktop links */}
-          <div className="hidden md:flex gap-8 items-center text-sm font-medium">
-            <a
-              href="#features"
-              onClick={(e) => scrollToSection(e, 'features')}
-              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
-            >
-              Features
-            </a>
-            <a
-              href="#how-it-works"
-              onClick={(e) => scrollToSection(e, 'how-it-works')}
-              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
-            >
-              How it Works
-            </a>
-            <a
-              href="#pricing"
-              onClick={(e) => scrollToSection(e, 'pricing')}
-              className="text-secondary hover:text-primary transition-colors duration-200 cursor-pointer"
-            >
-              Pricing
-            </a>
-          </div>
-
-          <div className="flex gap-3 items-center">
-            <Link
-              href="/login"
-              className="hidden sm:block text-secondary hover:text-primary transition-colors text-sm font-medium px-4 py-2"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              className="bg-brand-500 hover:bg-brand-400 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all btn-premium flex items-center gap-2"
-            >
-              Start Free <ArrowRight className="w-4 h-4" />
-            </Link>
-
-            {/* Mobile menu button */}
-            <button
-              className="md:hidden p-2 text-secondary hover:text-primary transition-colors"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            >
-              {mobileMenuOpen ? (
-                <X className="w-5 h-5" />
+    <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+      {/* Navigation */}
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="text-primary flex items-center justify-center">
+                {/* SVG Logo from Stitch */}
+                <svg className="size-8" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.8261 30.5736C16.7203 29.8826 20.2244 29.4783 24 29.4783C27.7756 29.4783 31.2797 29.8826 34.1739 30.5736C36.9144 31.2278 39.9967 32.7669 41.3563 33.8352L24.8486 7.36089C24.4571 6.73303 23.5429 6.73303 23.1514 7.36089L6.64374 33.8352C8.00331 32.7669 11.0856 31.2278 13.8261 30.5736Z" fill="currentColor"></path>
+                  <path clipRule="evenodd" d="M39.998 35.764C39.9944 35.7463 39.9875 35.7155 39.9748 35.6706C39.9436 35.5601 39.8949 35.4259 39.8346 35.2825C39.8168 35.2403 39.7989 35.1993 39.7813 35.1602C38.5103 34.2887 35.9788 33.0607 33.7095 32.5189C30.9875 31.8691 27.6413 31.4783 24 31.4783C20.3587 31.4783 17.0125 31.8691 14.2905 32.5189C12.0012 33.0654 9.44505 34.3104 8.18538 35.1832C8.17384 35.2075 8.16216 35.233 8.15052 35.2592C8.09919 35.3751 8.05721 35.4886 8.02977 35.589C8.00356 35.6848 8.00039 35.7333 8.00004 35.7388C8.00004 35.739 8 35.7393 8.00004 35.7388C8.00004 35.7641 8.0104 36.0767 8.68485 36.6314C9.34546 37.1746 10.4222 37.7531 11.9291 38.2772C14.9242 39.319 19.1919 40 24 40C28.8081 40 33.0758 39.319 36.0709 38.2772C37.5778 37.7531 38.6545 37.1746 39.3151 36.6314C39.9006 36.1499 39.9857 35.8511 39.998 35.764ZM4.95178 32.7688L21.4543 6.30267C22.6288 4.4191 25.3712 4.41909 26.5457 6.30267L43.0534 32.777C43.0709 32.8052 43.0878 32.8338 43.104 32.8629L41.3563 33.8352C43.104 32.8629 43.1038 32.8626 43.104 32.8629L43.1051 32.865L43.1065 32.8675L43.1101 32.8739L43.1199 32.8918C43.1276 32.906 43.1377 32.9246 43.1497 32.9473C43.1738 32.9925 43.2062 33.0545 43.244 33.1299C43.319 33.2792 43.4196 33.489 43.5217 33.7317C43.6901 34.1321 44 34.9311 44 35.7391C44 37.4427 43.003 38.7775 41.8558 39.7209C40.6947 40.6757 39.1354 41.4464 37.385 42.0552C33.8654 43.2794 29.133 44 24 44C18.867 44 14.1346 43.2794 10.615 42.0552C8.86463 41.4464 7.30529 40.6757 6.14419 39.7209C4.99695 38.7775 3.99999 37.4427 3.99999 35.7391C3.99999 34.8725 4.29264 34.0922 4.49321 33.6393C4.60375 33.3898 4.71348 33.1804 4.79687 33.0311C4.83898 32.9556 4.87547 32.8935 4.9035 32.8471C4.91754 32.8238 4.92954 32.8043 4.93916 32.7889L4.94662 32.777L4.95178 32.7688ZM35.9868 29.004L24 9.77997L12.0131 29.004C12.4661 28.8609 12.9179 28.7342 13.3617 28.6282C16.4281 27.8961 20.0901 27.4783 24 27.4783C27.9099 27.4783 31.5719 27.8961 34.6383 28.6282C35.082 28.7342 35.5339 28.8609 35.9868 29.004Z" fill="currentColor" fillRule="evenodd"></path>
+                </svg>
+              </div>
+              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">nxtscan</span>
+            </div>
+            <nav className="hidden md:flex items-center gap-8">
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Features</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Solutions</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Pricing</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Resources</a>
+            </nav>
+            <div className="flex items-center gap-4">
+              {!user ? (
+                <>
+                  <Link href="/login" className="hidden sm:inline-flex text-sm font-semibold hover:text-primary">Log in</Link>
+                  <Link href="/register" className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/50">
+                    Get Started
+                  </Link>
+                </>
               ) : (
-                <Menu className="w-5 h-5" />
+                <Link href="/dashboard" className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-all">
+                  Dashboard
+                </Link>
               )}
-            </button>
+              <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Mobile menu with AnimatePresence */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="md:hidden fixed top-[60px] left-0 right-0 z-50 px-6 pt-2"
-          >
-            <div className="glass-strong rounded-2xl p-4 space-y-1 shadow-2xl">
-              <a
-                href="#features"
-                onClick={(e) => scrollToSection(e, 'features')}
-                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-              >
-                Features
-              </a>
-              <a
-                href="#how-it-works"
-                onClick={(e) => scrollToSection(e, 'how-it-works')}
-                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-              >
-                How it Works
-              </a>
-              <a
-                href="#pricing"
-                onClick={(e) => scrollToSection(e, 'pricing')}
-                className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-              >
-                Pricing
-              </a>
-              <div className="border-t border-white/5 pt-3 mt-2">
-                <Link
-                  href="/login"
-                  className="block px-4 py-3 text-secondary hover:text-primary hover:bg-white/5 rounded-xl transition-colors text-sm font-medium"
-                >
-                  Log in
-                </Link>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ━━━ Hero Section ━━━ */}
-      <section className="relative w-full max-w-7xl px-6 mt-24 md:mt-36 flex flex-col items-center text-center z-10">
-        {/* Animated status badge */}
-        <motion.div
-          {...fadeUp}
-          transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full glass-strong border border-brand-500/20 text-brand-300 text-xs font-semibold uppercase tracking-wider mb-10"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          Systems Operational — Engine v2.0
-        </motion.div>
-
-        {/* Headline */}
-        <motion.h1
-          {...fadeUp}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-primary mb-8 leading-[0.95]"
-        >
-          Security Intelligence
-          <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 via-brand-500 to-brand-700 glow-text">
-            Made Simple.
-          </span>
-        </motion.h1>
-
-        <motion.p
-          {...fadeUp}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-base sm:text-lg md:text-xl text-secondary max-w-2xl mb-12 font-medium leading-relaxed"
-        >
-          Run instant SSL, DNS, and reputation checks in seconds.
-          <br className="hidden sm:block" />
-          Upgrade for automated monitoring, breach alerts, and executive reports.
-        </motion.p>
-
-        {/* ─── Scan Input ─── */}
-        <motion.div
-          {...fadeUp}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full max-w-2xl relative group mb-8 z-20"
-        >
-          {/* Glow behind input */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-brand-500/25 via-brand-600/15 to-brand-500/25 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-
-          <form
-            onSubmit={handleScan}
-            className="relative glass-strong rounded-2xl flex items-center p-2 shadow-2xl glow-ring glow-ring-hover"
-          >
-            <ScanLine className="w-5 h-5 text-tertiary ml-4 mr-2 flex-shrink-0" />
-            <input
-              ref={scanInputRef}
-              type="text"
-              value={scanUrl}
-              onChange={(e) => setScanUrl(e.target.value)}
-              placeholder="Enter your domain (e.g. example.com)"
-              className="flex-1 bg-transparent border-none outline-none text-primary px-2 placeholder-[rgba(244,244,245,0.25)] text-base font-medium min-w-0"
-              required
-              disabled={isScanning}
-            />
-            <button
-              type="submit"
-              disabled={isScanning}
-              className={`h-12 px-6 sm:px-8 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm flex-shrink-0
-                ${
-                  isScanning
-                    ? 'bg-brand-900/50 text-brand-300 cursor-not-allowed'
-                    : 'bg-brand-500 hover:bg-brand-400 text-white btn-premium'
-                }`}
-            >
-              {isScanning ? (
-                <>
-                  <Activity className="w-4 h-4 animate-spin" /> Scanning...
-                </>
-              ) : (
-                <>
-                  <Shield className="w-4 h-4" /> Scan Now
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-4 flex flex-col items-center gap-1.5 text-xs text-tertiary">
-            <p className="flex items-center gap-2">
-              <Lock className="w-3 h-3" /> No credit card required · Results
-              in under 30 seconds
-            </p>
-          </div>
-        </motion.div>
-
-        {/* ─── Scanning Progress ─── */}
-        <AnimatePresence>
-          {isScanning && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, height: 0 }}
-              animate={{ opacity: 1, y: 0, height: 'auto' }}
-              exit={{ opacity: 0, y: -10, height: 0 }}
-              className="w-full max-w-lg mb-10"
-            >
-              <div className="glass-strong rounded-2xl p-6 gradient-border">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center">
-                    <Activity className="w-4 h-4 text-brand-400 animate-spin" />
-                  </div>
-                  <div>
-                    <p className="text-primary text-sm font-semibold">Scanning in progress</p>
-                    <p className="text-tertiary text-xs">This usually takes 15–25 seconds</p>
-                  </div>
+      <main className="flex-grow">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden pt-16 pb-20 lg:pt-24 lg:pb-32">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center">
+              <div className="flex flex-col gap-8">
+                <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold leading-6 text-primary ring-1 ring-inset ring-primary/20 self-start">
+                  New: AI-Powered Insights 
+                  <ArrowRight className="w-4 h-4 ml-1" />
                 </div>
-
-                {/* Progress steps */}
-                <div className="space-y-2.5">
-                  {scanSteps.map((step, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      {i < scanStep ? (
-                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
-                      ) : i === scanStep ? (
-                        <div className="w-4 h-4 rounded-full border-2 border-brand-400 border-t-transparent animate-spin flex-shrink-0" />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full border border-white/10 flex-shrink-0" />
-                      )}
-                      <span
-                        className={`text-sm ${
-                          i < scanStep
-                            ? 'text-success'
-                            : i === scanStep
-                              ? 'text-primary font-medium'
-                              : 'text-tertiary'
-                        }`}
-                      >
-                        {step}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Progress bar */}
-                <div className="mt-5 h-1 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full"
-                    initial={{ width: '0%' }}
-                    animate={{ width: `${((scanStep + 1) / scanSteps.length) * 100}%` }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ─── Scan Error ─── */}
-        <AnimatePresence>
-          {scanError && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl glass-strong border border-red-500/20 p-5 rounded-2xl mb-10"
-            >
-              <div className="flex items-start gap-3 text-error text-sm">
-                <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold mb-1">Scan Error</p>
-                  <p className="text-red-400/80">{scanError}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setScanError(null);
-                    scanInputRef.current?.focus();
-                  }}
-                  className="p-1 hover:bg-white/5 rounded-lg transition-colors text-tertiary hover:text-primary"
-                  aria-label="Dismiss error"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ─── Scan Result ─── */}
-        {scanResult && (
-          <motion.div
-            ref={resultsRef}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="w-full max-w-3xl glass-strong rounded-3xl p-6 md:p-8 text-left mb-16 relative overflow-hidden gradient-border scroll-mt-24"
-          >
-            {/* Subtle bg accent */}
-            <div className="absolute top-0 right-0 w-48 h-48 bg-brand-500/5 rounded-full blur-[80px] pointer-events-none" />
-
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 pb-5 border-b border-white/5 relative z-10">
-              <div>
-                <h3 className="text-xl font-bold text-primary flex items-center gap-2 mb-1">
-                  <ShieldCheck className="w-5 h-5 text-success" />
-                  Scan Complete
-                </h3>
-                <p className="text-secondary font-mono text-sm">
-                  {scanResult.domain}
+                <h1 className="text-5xl font-black leading-[1.1] tracking-tight text-slate-900 dark:text-white sm:text-7xl">
+                  Security Intelligence <span className="text-primary">Made Simple</span>
+                </h1>
+                <p className="text-lg leading-8 text-slate-600 dark:text-slate-400 max-w-xl">
+                  The all-in-one platform to analyze your infrastructure, detect vulnerabilities, and instantly generate remediation reports in one unified workspace.
                 </p>
-              </div>
-              <div className="flex gap-2">
-                {user ? (
-                  <a
-                    href={getScanPdfUrl(scanResult.task_id)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
-                  >
-                    <FileCheck className="w-4 h-4" /> Download Report
-                  </a>
-                ) : (
-                  <Link
-                    href={`/login`}
-                    className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all btn-premium flex-shrink-0"
-                  >
-                    <FileCheck className="w-4 h-4" /> Download Report
-                  </Link>
-                )}
-                <button
-                  onClick={() => {
-                    setScanResult(null);
-                    setScanUrl('');
-                    scanInputRef.current?.focus();
-                  }}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium btn-ghost flex items-center gap-2 flex-shrink-0"
-                >
-                  New Scan
-                </button>
-              </div>
-            </div>
+                
+                {/* Scan Form inside Hero */}
+                <div className="w-full relative mt-4">
+                  <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-grow">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Globe className="h-5 w-5 text-slate-400" />
+                      </div>
+                      <input
+                        ref={scanInputRef}
+                        type="text"
+                        value={scanUrl}
+                        onChange={(e) => setScanUrl(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm sm:text-lg h-14"
+                        placeholder="Enter your domain (e.g. example.com)"
+                        disabled={isScanning}
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isScanning}
+                      className="h-14 px-8 rounded-xl bg-primary text-white font-bold text-lg shadow-lg hover:translate-y-[-1px] transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isScanning ? (
+                        <><Activity className="w-5 h-5 animate-spin" /> Scanning</>
+                      ) : (
+                        <><Shield className="w-5 h-5" /> Free Scan</>
+                      )}
+                    </button>
+                  </form>
+                  <p className="mt-3 text-sm text-slate-500 flex items-center gap-2">
+                    <Lock className="w-3 h-3" /> No credit card required. Results in <span className="font-semibold text-slate-700 dark:text-slate-300">seconds</span>.
+                  </p>
+                </div>
 
-            <div className="space-y-5 relative z-10">
-              {/* AI Remediation Section */}
-              <div className="glass-surface p-5 rounded-2xl">
-                <h4 className="flex items-center gap-2 text-brand-400 font-semibold text-sm mb-3">
-                  <Sparkles className="w-4 h-4" /> AI-Powered Remediation
-                </h4>
-                <div className="text-secondary text-sm leading-relaxed whitespace-pre-wrap">
-                  {scanResult.ai_remediation}
+                <div className="flex items-center gap-4 text-sm text-slate-500 mt-2">
+                  <div className="flex -space-x-2">
+                    <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-200"></div>
+                    <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-300"></div>
+                    <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-400"></div>
+                  </div>
+                  <p>Trusted by over 1,000 security teams</p>
                 </div>
               </div>
 
-              {/* Checks Grid */}
-              <div>
-                <h4 className="text-primary font-semibold text-sm mb-3">
-                  Vulnerability Assessment
-                </h4>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  {scanResult.scan_data?.map(
-                    (check: ScanCheck, i: number) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="glass-surface p-4 rounded-xl text-sm hover:border-white/10 transition-colors"
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-semibold text-primary">
-                            {check.check_name}
-                          </span>
-                          <span
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${
-                              check.status === 'pass'
-                                ? 'badge-pass'
-                                : check.status === 'warning'
-                                  ? 'badge-warning'
-                                  : 'badge-fail'
-                            }`}
-                          >
-                            {check.status}
-                          </span>
+              <div className="relative">
+                <div className="aspect-[4/3] rounded-2xl bg-gradient-to-tr from-primary/20 to-purple-500/10 shadow-2xl ring-1 ring-slate-200 dark:ring-slate-800 overflow-hidden flex flex-col pt-8">
+                  <div className="w-full flex-grow bg-slate-100 dark:bg-slate-900 relative rounded-t-xl mx-8 px-6 pt-6 border-x border-t border-slate-200 dark:border-slate-800 text-left">
+                    {/* Dynamic View based on Scan status */}
+                    {isScanning ? (
+                      <div className="flex flex-col h-full items-center justify-center -mt-6">
+                        <Activity className="w-12 h-12 text-primary animate-spin mb-4" />
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Scanning {scanUrl || 'Domain'}</h3>
+                        <div className="space-y-3 w-full max-w-sm">
+                          {scanSteps.map((step, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-white dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800 shadow-sm">
+                              {i < scanStep ? (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                              ) : i === scanStep ? (
+                                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border-2 border-slate-200 dark:border-slate-700" />
+                              )}
+                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{step}</span>
+                            </div>
+                          ))}
                         </div>
-                        <p className="text-tertiary text-xs leading-relaxed">
-                          {check.detail}
-                        </p>
-                      </motion.div>
-                    ),
-                  )}
+                      </div>
+                    ) : scanError ? (
+                      <div className="flex flex-col h-full items-center justify-center p-6 text-center text-red-600 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-900">
+                        <Shield className="w-12 h-12 mb-4" />
+                        <h3 className="text-xl font-bold mb-2">Scan Failed</h3>
+                        <p>{scanError}</p>
+                      </div>
+                    ) : scanResult ? (
+                      <div ref={resultsRef} className="h-full overflow-y-auto no-scrollbar pb-6 scroll-mt-24">
+                        <div className="flex items-center gap-3 mb-6">
+                          <ShieldCheck className="w-8 h-8 text-emerald-500" />
+                          <div>
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scan Complete</h2>
+                            <p className="text-sm font-mono text-slate-500">{scanResult.domain}</p>
+                          </div>
+                        </div>
+                        {/* AI Remediation */}
+                        <div className="mb-6 bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+                          <h4 className="flex items-center gap-2 text-primary font-bold text-sm mb-2"><Sparkles className="w-4 h-4" /> AI Remediation</h4>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 max-h-32 overflow-y-auto pr-2">{scanResult.ai_remediation}</p>
+                        </div>
+                        {/* Checks */}
+                        <div className="grid gap-3 pb-8">
+                          {scanResult.scan_data?.slice(0, 3).map((check, i) => (
+                            <div key={i} className="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-semibold text-slate-900 dark:text-white text-sm">{check.check_name}</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  check.status === 'pass' ? 'bg-emerald-100 text-emerald-700' : check.status === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                }`}>{check.status}</span>
+                              </div>
+                              <p className="text-xs text-slate-500 truncate">{check.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-100 dark:from-slate-900 to-transparent flex justify-center">
+                          <a href={getScanPdfUrl(scanResult.task_id)} target="_blank" rel="noreferrer" className="bg-primary text-white text-sm font-bold py-2 px-6 rounded-lg shadow inline-flex items-center gap-2 hover:bg-primary/90 transition-colors">
+                            <FileCheck className="w-4 h-4"/> Full Report
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      // Abstract Dashboard Representation (Original design)
+                      <div className="w-full h-full relative">
+                        <div className="flex gap-4 mb-8">
+                          <div className="h-8 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                          <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-full ml-auto"></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="h-24 bg-primary/5 rounded-lg border border-primary/20 p-4 flex flex-col justify-between">
+                            <div className="h-4 w-16 bg-primary/30 rounded"></div>
+                            <div className="h-8 w-24 bg-primary/20 rounded"></div>
+                          </div>
+                          <div className="h-24 bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 p-4 flex flex-col justify-between">
+                            <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                            <div className="h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                          </div>
+                        </div>
+                        <div className="h-32 bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+                          <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded mb-4"></div>
+                          <div className="space-y-2">
+                            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded"></div>
+                            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded"></div>
+                            <div className="h-3 w-3/4 bg-slate-100 dark:bg-slate-800 rounded"></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                
+                {/* Decorative elements */}
+                <div className="absolute -z-10 -top-10 -right-10 size-64 bg-primary/20 blur-3xl rounded-full"></div>
+                <div className="absolute -z-10 -bottom-10 -left-10 size-64 bg-purple-500/20 blur-3xl rounded-full"></div>
               </div>
             </div>
-          </motion.div>
-        )}
+          </div>
+        </section>
 
-        {/* Scroll indicator */}
-        {!scanResult && !isScanning && !scanError && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.5 }}
-            className="mt-6 mb-8"
-           >
-            <ChevronDown className="w-5 h-5 text-tertiary animate-bounce" />
-          </motion.div>
-        )}
-      </section>
-
-      {/* ━━━ Trust Bar ━━━ */}
-      <section className="w-full py-14 overflow-hidden relative mb-24">
-        <div className="section-divider mb-12" />
-        <p className="text-tertiary text-[11px] font-semibold uppercase tracking-[0.25em] mb-10 text-center">
-          Powered by leading intelligence frameworks
-        </p>
-
-        <div className="relative">
-          <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-[#050507] to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-[#050507] to-transparent z-10 pointer-events-none" />
-
-          <div className="flex w-[200%] gap-20 opacity-40 animate-marquee items-center text-secondary">
-            {[...trustLogos, ...trustLogos].map((logo, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2.5 text-lg font-semibold font-mono tracking-tight shrink-0 hover:text-primary hover:opacity-100 transition-all duration-300"
-              >
-                {logo.icon}
-                {logo.name}
+        {/* Trust Section */}
+        <section className="py-12 border-y border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+          <p className="text-center text-sm font-semibold text-slate-500 uppercase tracking-widest mb-8">Integrated with Industry Standard Tools</p>
+          <div className="flex gap-16 opacity-60 grayscale items-center text-slate-800 dark:text-slate-300 w-max hover:grayscale-0 hover:opacity-100 transition-all duration-500 mx-auto px-4 overflow-x-auto max-w-7xl">
+            {trustLogos.map((logo, i) => (
+              <div key={i} className="flex items-center gap-3 text-lg font-bold shrink-0">
+                {logo.icon} {logo.name}
               </div>
             ))}
           </div>
-        </div>
-        <div className="section-divider mt-12" />
-      </section>
+        </section>
 
-      {/* ━━━ Features Grid ━━━ */}
-      <section id="features" className="w-full max-w-7xl px-6 mb-32 scroll-mt-24">
-        <motion.div
-          {...fadeUp}
-          transition={{ duration: 0.5 }}
-          viewport={{ once: true }}
-          className="text-center mb-16"
-        >
-          <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4" /> Capabilities
-          </p>
-          <h2 className="text-3xl md:text-5xl font-bold text-primary mb-5 tracking-tight">
-            Complete Security Posture
-          </h2>
-          <p className="text-secondary text-lg max-w-2xl mx-auto leading-relaxed">
-            Everything you need to secure your infrastructure, from header
-            checks to deep port scanning and reputation monitoring.
-          </p>
-        </motion.div>
+        {/* Capabilities Section */}
+        <section className="py-24 bg-slate-50 dark:bg-slate-900/50">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-16 max-w-3xl">
+              <h2 className="text-primary font-bold tracking-wider uppercase text-sm mb-4">Capabilities</h2>
+              <h3 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white mb-6">Complete Security Posture</h3>
+              <p className="text-lg text-slate-600 dark:text-slate-400">Our suite of tools is designed to help you scan, track, and remediate vulnerabilities faster than ever.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {features.map((feature, i) => (
+                <div key={i} className="group p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all shadow-sm hover:shadow-xl">
+                  <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
+                    {feature.icon}
+                  </div>
+                  <h4 className="text-xl font-bold mb-3 text-slate-900 dark:text-white">{feature.title}</h4>
+                  <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-        <motion.div
-          variants={staggerContainer}
-          initial="initial"
-          whileInView="animate"
-          viewport={{ once: true }}
-          className="grid md:grid-cols-2 gap-5"
-        >
-          {features.map((feature, i) => (
-            <motion.div
-              variants={fadeUp}
-              transition={{ duration: 0.4 }}
-              key={i}
-              className="glass p-7 rounded-2xl hover:border-brand-500/25 transition-all duration-300 card-hover group relative overflow-hidden"
-            >
-              {/* Subtle gradient accent on hover */}
-              <div
-                className={`absolute top-0 right-0 w-40 h-40 bg-gradient-to-br ${feature.gradient} rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`}
-              />
-
-              <div
-                className={`w-11 h-11 rounded-xl flex items-center justify-center mb-5 ${feature.iconColor} ${feature.iconBg} border relative z-10`}
-              >
-                {feature.icon}
+        {/* Pricing Section */}
+        <section className="py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white mb-4">Flexible Pricing Plans</h2>
+              <p className="text-slate-600 dark:text-slate-400">Choose the perfect plan for your stage of growth.</p>
+              {/* Toggle */}
+              <div className="mt-8 flex justify-center items-center gap-4">
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Monthly</span>
+                <button className="relative w-12 h-6 rounded-full bg-primary/20 transition-colors focus:outline-none">
+                  <span className="absolute left-1 top-1 size-4 bg-primary rounded-full transition-transform translate-x-6"></span>
+                </button>
+                <span className="text-sm font-medium text-slate-900 dark:text-white">Yearly <span className="text-primary font-bold">(Save 20%)</span></span>
               </div>
-              <h3 className="text-xl font-bold text-primary mb-2 relative z-10">
-                {feature.title}
-              </h3>
-              <p className="text-secondary leading-relaxed text-sm relative z-10">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Basic */}
+              <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Starter</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-black text-slate-900 dark:text-white">$0</span>
+                  <span className="text-slate-500 text-sm">/mo</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Perfect for freelancers and solo founders starting their journey.</p>
+                <ul className="flex-grow space-y-4 mb-8">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> One-off network scans
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Header analysis
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Basic PDF report
+                  </li>
+                </ul>
+                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">Start Scanning</button>
+              </div>
+              
+              {/* Professional (Featured) */}
+              <div className="flex flex-col p-8 rounded-2xl bg-primary text-white shadow-xl relative scale-105 z-10">
+                <div className="absolute top-0 right-8 transform -translate-y-1/2 bg-indigo-400 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Most Popular</div>
+                <h3 className="text-lg font-bold mb-2">Professional</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-black">$49</span>
+                  <span className="text-white/70 text-sm">/mo</span>
+                </div>
+                <p className="text-white/80 text-sm mb-8">Best for growing teams that need automated monitoring and AI insights.</p>
+                <ul className="flex-grow space-y-4 mb-8">
+                  <li className="flex items-center gap-3 text-sm text-white/90">
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Automated Weekly Scans
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-white/90">
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> AI-Powered Remediation
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-white/90">
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Real-time Email Alerts
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-white/90">
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Complete Scan History
+                  </li>
+                </ul>
+                <button className="w-full py-3 px-4 rounded-xl bg-white text-primary font-bold hover:bg-slate-50 transition-all shadow-md">Start 14-day Free Trial</button>
+              </div>
+              
+              {/* Enterprise */}
+              <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Enterprise</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-black text-slate-900 dark:text-white">$199</span>
+                  <span className="text-slate-500 text-sm">/mo</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Scale your organization with enterprise-grade security and API access.</p>
+                <ul className="flex-grow space-y-4 mb-8">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Everything in Pro
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Unlimited Projects/Domains
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Full API Access
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Custom Integrations
+                  </li>
+                </ul>
+                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">Contact Sales</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ━━━ How It Works Section ━━━ */}
-      <section id="how-it-works" className="w-full max-w-7xl px-6 mb-32 scroll-mt-24">
-        <div className="glass-strong rounded-3xl overflow-hidden relative gradient-border">
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-500/[0.04] to-transparent pointer-events-none" />
+        {/* Final CTA Section */}
+        <section className="py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="bg-primary rounded-3xl p-12 text-center text-white overflow-hidden relative">
+              <div className="relative z-10 max-w-2xl mx-auto">
+                <h2 className="text-4xl font-black mb-6">Ready to secure your infrastructure?</h2>
+                <p className="text-lg text-indigo-100 mb-10">Start scanning today. Run a free instant network analysis in seconds.</p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button className="px-8 py-4 bg-white text-primary rounded-xl font-bold text-lg shadow-xl hover:bg-slate-50 transition-all flex justify-center items-center gap-2">
+                    <ScanLine className="w-5 h-5" /> Run Free Scan
+                  </button>
+                  <Link href="/register" className="px-8 py-4 bg-indigo-800/50 border border-white/20 text-white rounded-xl font-bold text-lg flex items-center justify-center hover:bg-indigo-800/70 transition-all">
+                    Create Account
+                  </Link>
+                </div>
+              </div>
+              {/* Abstract Background Decor */}
+              <div className="absolute -top-24 -left-24 size-96 bg-indigo-400/20 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-24 -right-24 size-96 bg-slate-100/10 rounded-full blur-3xl"></div>
+            </div>
+          </div>
+        </section>
+      </main>
 
-          <div className="p-8 md:p-14 relative z-10 flex flex-col lg:flex-row gap-12 items-center">
-            {/* Text content */}
-            <div className="flex-1 space-y-6">
-              <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
-                <Activity className="w-4 h-4" /> How it Works
-              </p>
-              <h2 className="text-3xl md:text-4xl font-bold text-primary leading-tight tracking-tight">
-                Lightning-fast
-                <br />
-                intelligence gathering.
-              </h2>
-              <p className="text-secondary text-base leading-relaxed">
-                Our asynchronous scanner queues dozens of checks in parallel.
-                We consolidate data from multiple APIs into a single,
-                comprehensive report.
-              </p>
-              <ul className="space-y-3">
-                {checkItems.map((item, i) => (
-                  <motion.li
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08 }}
-                    className="flex items-center gap-3 text-secondary text-sm"
-                  >
-                    <CheckCircle2 className="text-success w-4 h-4 flex-shrink-0" />
-                    {item}
-                  </motion.li>
-                ))}
+      {/* Footer */}
+      <footer className="bg-white dark:bg-slate-950 pt-20 pb-10 border-t border-slate-200 dark:border-slate-800 w-full mt-auto">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-16">
+            <div className="col-span-2 lg:col-span-2">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="text-primary">
+                  <svg className="size-8" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13.8261 30.5736C16.7203 29.8826 20.2244 29.4783 24 29.4783C27.7756 29.4783 31.2797 29.8826 34.1739 30.5736C36.9144 31.2278 39.9967 32.7669 41.3563 33.8352L24.8486 7.36089C24.4571 6.73303 23.5429 6.73303 23.1514 7.36089L6.64374 33.8352C8.00331 32.7669 11.0856 31.2278 13.8261 30.5736Z" fill="currentColor"></path>
+                    <path clipRule="evenodd" d="M39.998 35.764C39.9944 35.7463 39.9875 35.7155 39.9748 35.6706C39.9436 35.5601 39.8949 35.4259 39.8346 35.2825C39.8168 35.2403 39.7989 35.1993 39.7813 35.1602C38.5103 34.2887 35.9788 33.0607 33.7095 32.5189C30.9875 31.8691 27.6413 31.4783 24 31.4783C20.3587 31.4783 17.0125 31.8691 14.2905 32.5189C12.0012 33.0654 9.44505 34.3104 8.18538 35.1832C8.17384 35.2075 8.16216 35.233 8.15052 35.2592C8.09919 35.3751 8.05721 35.4886 8.02977 35.589C8.00356 35.6848 8.00039 35.7333 8.00004 35.7388C8.00004 35.739 8 35.7393 8.00004 35.7388C8.00004 35.7641 8.0104 36.0767 8.68485 36.6314C9.34546 37.1746 10.4222 37.7531 11.9291 38.2772C14.9242 39.319 19.1919 40 24 40C28.8081 40 33.0758 39.319 36.0709 38.2772C37.5778 37.7531 38.6545 37.1746 39.3151 36.6314C39.9006 36.1499 39.9857 35.8511 39.998 35.764ZM4.95178 32.7688L21.4543 6.30267C22.6288 4.4191 25.3712 4.41909 26.5457 6.30267L43.0534 32.777C43.0709 32.8052 43.0878 32.8338 43.104 32.8629L41.3563 33.8352C43.104 32.8629 43.1038 32.8626 43.104 32.8629L43.1051 32.865L43.1065 32.8675L43.1101 32.8739L43.1199 32.8918C43.1276 32.906 43.1377 32.9246 43.1497 32.9473C43.1738 32.9925 43.2062 33.0545 43.244 33.1299C43.319 33.2792 43.4196 33.489 43.5217 33.7317C43.6901 34.1321 44 34.9311 44 35.7391C44 37.4427 43.003 38.7775 41.8558 39.7209C40.6947 40.6757 39.1354 41.4464 37.385 42.0552C33.8654 43.2794 29.133 44 24 44C18.867 44 14.1346 43.2794 10.615 42.0552C8.86463 41.4464 7.30529 40.6757 6.14419 39.7209C4.99695 38.7775 3.99999 37.4427 3.99999 35.7391C3.99999 34.8725 4.29264 34.0922 4.49321 33.6393C4.60375 33.3898 4.71348 33.1804 4.79687 33.0311C4.83898 32.9556 4.87547 32.8935 4.9035 32.8471C4.91754 32.8238 4.92954 32.8043 4.93916 32.7889L4.94662 32.777L4.95178 32.7688ZM35.9868 29.004L24 9.77997L12.0131 29.004C12.4661 28.8609 12.9179 28.7342 13.3617 28.6282C16.4281 27.8961 20.0901 27.4783 24 27.4783C27.9099 27.4783 31.5719 27.8961 34.6383 28.6282C35.082 28.7342 35.5339 28.8609 35.9868 29.004Z" fill="currentColor" fillRule="evenodd"></path>
+                  </svg>
+                </div>
+                <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">nxtscan</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 max-w-xs mb-8">Empowering businesses to secure their infrastructure with intelligent analysis tools.</p>
+              <div className="flex gap-4">
+                <a className="text-slate-400 hover:text-primary transition-colors" href="#"><Globe className="w-5 h-5"/></a>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 dark:text-white mb-6">Product</h4>
+              <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+                <li><a className="hover:text-primary transition-colors" href="#">Features</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Integrations</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Pricing</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Changelog</a></li>
               </ul>
             </div>
-
-            {/* Terminal mockup */}
-            <div className="flex-1 w-full">
-              <div className="glass-strong rounded-2xl overflow-hidden shadow-2xl border border-white/[0.06] animate-glow-pulse">
-                {/* Title bar */}
-                <div className="bg-white/[0.03] px-5 py-3.5 border-b border-white/5 flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/60" />
-                  <span className="text-tertiary text-xs font-mono ml-3">
-                    nextlab-scanner
-                  </span>
-                </div>
-
-                {/* Terminal content */}
-                <div className="p-6 font-mono text-[13px] space-y-2.5 min-h-[280px] relative">
-                  {terminalLines.map((line, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -8 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.12 }}
-                      className={line.color}
-                    >
-                      {line.text}
-                    </motion.div>
-                  ))}
-
-                  {/* Blinking cursor */}
-                  <div className="flex items-center gap-0.5 mt-2">
-                    <span className="text-tertiary">$</span>
-                    <span className="w-2 h-4 bg-brand-400 animate-blink ml-1" />
-                  </div>
-
-                  {/* Bottom fade */}
-                  <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#0d0d10] to-transparent pointer-events-none" />
-                </div>
-              </div>
+            <div>
+              <h4 className="font-bold text-slate-900 dark:text-white mb-6">Company</h4>
+              <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+                <li><a className="hover:text-primary transition-colors" href="#">About</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Careers</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Blog</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Contact</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 dark:text-white mb-6">Support</h4>
+              <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+                <li><a className="hover:text-primary transition-colors" href="#">Help Center</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Documentation</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Security</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#">Privacy</a></li>
+              </ul>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ━━━ Pricing Section ━━━ */}
-      <section id="pricing" className="w-full max-w-6xl px-6 mb-32 scroll-mt-24">
-        <motion.div
-          {...fadeUp}
-          transition={{ duration: 0.5 }}
-          viewport={{ once: true }}
-          className="text-center mb-16"
-        >
-          <p className="text-brand-400 text-sm font-semibold uppercase tracking-wider mb-4">
-            Pricing
-          </p>
-          <h2 className="text-3xl md:text-5xl font-bold text-primary mb-4 tracking-tight">
-            Open Source & Free
-          </h2>
-          <p className="text-secondary text-lg">
-            Self-host the full scanner. No limits, no paywalls.
-          </p>
-        </motion.div>
-
-        <div className="grid lg:grid-cols-3 gap-6 items-start">
-          {/* FREE */}
-          <motion.div
-            {...fadeUp}
-            transition={{ duration: 0.4, delay: 0 }}
-            viewport={{ once: true }}
-            className="glass p-8 rounded-3xl h-full flex flex-col card-hover"
-          >
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-primary mb-1">Hobbyist</h3>
-              <p className="text-tertiary text-sm">
-                Instant analysis, no account required
-              </p>
+          <div className="pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
+            <p>© 2026 nxtscan. All rights reserved.</p>
+            <div className="flex gap-8">
+              <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+              <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
+              <a className="hover:text-primary transition-colors" href="#">Cookie Settings</a>
             </div>
-            <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-primary">$0</span>
-              <span className="text-tertiary mb-1.5 text-sm">/forever</span>
-            </div>
-            <div className="h-px bg-white/5 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-secondary flex-1">
-              {[
-                '1 scan per day',
-                'Basic vulnerability checks',
-                'SSL & headers validation',
-                'No signup required',
-              ].map((item, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="text-tertiary w-4 h-4 flex-shrink-0" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={() => {
-                scrollToTop();
-                setTimeout(() => scanInputRef.current?.focus(), 500);
-              }}
-              className="w-full py-3.5 rounded-xl btn-ghost text-primary font-medium text-sm"
-            >
-              Start Free Scan
-            </button>
-          </motion.div>
-
-          {/* PRO */}
-          <motion.div
-            {...fadeUp}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            viewport={{ once: true }}
-            className="relative glass-accent p-8 rounded-3xl border-brand-500/30 shadow-[0_0_60px_rgba(124,92,231,0.1)] z-10 flex flex-col lg:-translate-y-3"
-          >
-            <div className="absolute -top-3.5 left-0 right-0 flex justify-center">
-              <span className="bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shimmer">
-                Most Popular
-              </span>
-            </div>
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-primary mb-1">
-                Professional
-              </h3>
-              <p className="text-secondary text-sm">
-                Automated monitoring for professionals
-              </p>
-            </div>
-            <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-primary">Free</span>
-            </div>
-            <div className="h-px bg-brand-500/10 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-primary flex-1 font-medium">
-              {[
-                'Unlimited scans',
-                '15 Advanced security checks',
-                'Automated weekly monitoring',
-                'Real-time email alerts',
-                'Downloadable PDF Reports',
-                '30-day history retention',
-              ].map((item, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="text-brand-400 w-4 h-4 flex-shrink-0" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/register"
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-sm transition-all btn-premium flex justify-center items-center gap-2"
-            >
-              <Shield className="w-4 h-4" />
-              Get Started Free
-            </Link>
-          </motion.div>
-
-          {/* AGENCY */}
-          <motion.div
-            {...fadeUp}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            viewport={{ once: true }}
-            className="glass p-8 rounded-3xl h-full flex flex-col card-hover"
-          >
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-primary mb-1">Agency</h3>
-              <p className="text-tertiary text-sm">
-                White-label reports for multiple clients
-              </p>
-            </div>
-            <div className="flex items-end gap-1 mb-8">
-              <span className="text-5xl font-extrabold text-primary">$29</span>
-              <span className="text-tertiary mb-1.5 text-sm">/month</span>
-            </div>
-            <div className="h-px bg-white/5 mb-8" />
-            <ul className="space-y-4 mb-10 text-sm text-secondary flex-1">
-              {[
-                'Up to 10 monitored domains',
-                'White-label PDF branding',
-                'Client report sharing links',
-                'Priority API access',
-                'Direct support line',
-              ].map((item, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="text-tertiary w-4 h-4 flex-shrink-0" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <button className="w-full py-3.5 rounded-xl btn-ghost text-primary font-medium text-sm">
-              Contact Sales
-            </button>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ━━━ Bottom CTA ━━━ */}
-      <section className="w-full max-w-4xl px-6">
-        <div className="glass-accent p-12 md:p-16 rounded-3xl relative overflow-hidden text-center gradient-border animate-glow-pulse">
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-500/[0.05] to-transparent pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-brand-500/[0.06] blur-[100px] pointer-events-none" />
-
-          <div className="relative z-10">
-            <h2 className="text-3xl md:text-5xl font-bold text-primary mb-5 tracking-tight">
-              Securing the web,
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-brand-500">
-                one scan at a time.
-              </span>
-            </h2>
-            <p className="text-secondary text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
-              Join hundreds of developers and agencies trusting NextLab to
-              monitor their digital perimeter.
-            </p>
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center bg-brand-500 hover:bg-brand-400 text-white px-8 py-4 rounded-xl font-bold transition-all text-base gap-2 btn-premium"
-            >
-              Get Started Free <ArrowRight className="w-5 h-5" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ━━━ Footer ━━━ */}
-      <footer className="w-full max-w-7xl px-6 mt-24 pb-12">
-        <div className="section-divider mb-10" />
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
-            <Logo size="small" />
-            <span className="text-tertiary text-sm">
-              © {new Date().getFullYear()} NextLab. All rights reserved.
-            </span>
-          </div>
-          <div className="flex gap-6 text-sm text-tertiary">
-            <Link
-              href="#"
-              className="hover:text-secondary transition-colors"
-            >
-              Privacy
-            </Link>
-            <Link
-              href="#"
-              className="hover:text-secondary transition-colors"
-            >
-              Terms
-            </Link>
-            <Link
-              href="#"
-              className="hover:text-secondary transition-colors"
-            >
-              Contact
-            </Link>
           </div>
         </div>
       </footer>
-
-      {/* ━━━ Back to Top Button ━━━ */}
-      <AnimatePresence>
-        {showScrollTop && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={scrollToTop}
-            className="fixed bottom-8 right-8 z-50 w-11 h-11 rounded-xl glass-strong flex items-center justify-center text-secondary hover:text-primary hover:border-brand-500/30 transition-all shadow-lg"
-            aria-label="Scroll to top"
-          >
-            <ArrowUp className="w-5 h-5" />
-          </motion.button>
-        )}
-      </AnimatePresence>
-    </main>
+    </div>
   );
 }
