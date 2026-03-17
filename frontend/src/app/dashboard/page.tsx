@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, Activity, AlertTriangle, CheckCircle, Globe, Play, Shield, Trash2, X, ShieldCheck, Zap, Lock, Server } from 'lucide-react'
+import { Plus, Activity, AlertTriangle, CheckCircle, Globe, Play, Shield, Trash2, X, ShieldCheck, Zap, Lock, Server, Bell, BarChart3 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { triggerProScan } from '@/lib/api'
 import { normalizeDomain } from '@/lib/domain'
@@ -245,6 +245,52 @@ export default function Dashboard() {
                         </div>
                         <h3 className="text-4xl font-black text-primary mb-1 relative z-10 tracking-tight">Continuous</h3>
                         <p className="text-secondary text-sm font-medium relative z-10 uppercase tracking-widest">Monitoring Mode</p>
+                    </div>
+                </motion.div>
+
+                {/* Usage & alerts row */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.18 }}
+                    className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10"
+                >
+                    <div className="glass p-5 rounded-3xl border border-white/[0.08] flex items-start gap-4">
+                        <div className="p-2.5 rounded-2xl bg-brand-500/15 border border-brand-500/30 text-brand-300">
+                            <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary mb-1.5">
+                                Usage vs plan
+                            </p>
+                            <p className="text-sm text-primary mb-1">
+                                {domains.length} / ∞ monitored domains
+                            </p>
+                            <p className="text-xs text-secondary">
+                                {plan === 'free'
+                                    ? 'You are on the Free plan — add a few key domains to establish coverage.'
+                                    : plan === 'pro'
+                                        ? 'Professional plan — automated weekly scans are active for all monitored domains.'
+                                        : 'Enterprise plan — unlimited domains with advanced reporting and API access.'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="glass p-5 rounded-3xl border border-white/[0.08] flex items-start gap-4 lg:col-span-2">
+                        <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                            <Bell className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary mb-1.5">
+                                Alerts & reporting
+                            </p>
+                            <p className="text-sm text-primary mb-1">
+                                Centralize findings into scheduled PDF reports for leadership.
+                            </p>
+                            <p className="text-xs text-secondary">
+                                Weekly summaries and breach alerts are available on paid plans. Connect your domains now to
+                                start building an executive-friendly history of your external posture.
+                            </p>
+                        </div>
                     </div>
                 </motion.div>
 

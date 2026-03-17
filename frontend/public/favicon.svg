@@ -1,0 +1,25 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">nxtscan favicon</title>
+  <desc id="desc">Minimal shield mark matching the nxtscan logo</desc>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2d336c"/>
+      <stop offset="50%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="#050507"/>
+  <path
+    d="M13.8 30.6C16.7 29.9 20.2 29.5 24 29.5C27.8 29.5 31.3 29.9 34.2 30.6C36.9 31.2 40.0 32.8 41.4 33.9L24.85 7.36C24.46 6.73 23.54 6.73 23.15 7.36L6.64 33.84C8.00 32.77 11.08 31.23 13.8 30.6Z"
+    fill="url(#g)"
+  />
+  <path
+    d="M19 21L23 25L31 17"
+    fill="none"
+    stroke="#ecfeff"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
+

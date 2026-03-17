@@ -76,6 +76,7 @@ export default function Home() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
+  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -110,6 +111,7 @@ export default function Home() {
     if (!scanUrl) return;
     setIsScanning(true);
     setScanResult(null);
+    setShowDownloadPrompt(false);
     setScanError(null);
     setScanStep(0);
 
@@ -132,6 +134,7 @@ export default function Home() {
             if (scanStepRef.current) clearInterval(scanStepRef.current);
             setIsScanning(false);
             setScanResult({ ...pollData.result, task_id: start.task_id });
+            setShowDownloadPrompt(true);
             setTimeout(() => {
               resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 300);
@@ -308,7 +311,7 @@ export default function Home() {
                           <p className="text-sm text-slate-600 dark:text-slate-400 max-h-32 overflow-y-auto pr-2">{scanResult.ai_remediation}</p>
                         </div>
                         {/* Checks */}
-                        <div className="grid gap-3 pb-8">
+                        <div className="grid gap-3 pb-6">
                           {scanResult.scan_data?.slice(0, 3).map((check, i) => (
                             <div key={i} className="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                               <div className="flex justify-between items-center mb-1">
@@ -321,11 +324,20 @@ export default function Home() {
                             </div>
                           ))}
                         </div>
-                        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-100 dark:from-slate-900 to-transparent flex justify-center">
-                          <a href={getScanPdfUrl(scanResult.task_id)} target="_blank" rel="noreferrer" className="bg-primary text-white text-sm font-bold py-2 px-6 rounded-lg shadow inline-flex items-center gap-2 hover:bg-primary/90 transition-colors">
-                            <FileCheck className="w-4 h-4"/> Full Report
-                          </a>
-                        </div>
+                        {showDownloadPrompt && (
+                          <div className="mt-2 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Want the full bilingual PDF report with all checks and remediation details?
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => window.open(getScanPdfUrl(scanResult.task_id), '_blank', 'noopener,noreferrer')}
+                              className="w-full bg-primary text-white text-sm font-bold py-2.5 px-4 rounded-lg shadow inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
+                            >
+                              <FileCheck className="w-4 h-4"/> Download full report
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       // Abstract Dashboard Representation (Original design)
@@ -536,43 +548,86 @@ export default function Home() {
               </div>
               <p className="text-slate-600 dark:text-slate-400 max-w-xs mb-8">Empowering businesses to secure their infrastructure with intelligent analysis tools.</p>
               <div className="flex gap-4">
-                <a className="text-slate-400 hover:text-primary transition-colors" href="#"><Globe className="w-5 h-5"/></a>
+                <a
+                  className="text-slate-400 hover:text-primary transition-colors"
+                  href="https://nxtlab-v1.vercel.app/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Globe className="w-5 h-5"/>
+                </a>
               </div>
             </div>
             <div>
               <h4 className="font-bold text-slate-900 dark:text-white mb-6">Product</h4>
               <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
-                <li><a className="hover:text-primary transition-colors" href="#">Features</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Integrations</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Pricing</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Changelog</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#features">Features</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#features">Integrations</a></li>
+                <li><a className="hover:text-primary transition-colors" href="#pricing">Pricing</a></li>
+                <li><Link className="hover:text-primary transition-colors" href="/changelog">Changelog</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-bold text-slate-900 dark:text-white mb-6">Company</h4>
               <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
-                <li><a className="hover:text-primary transition-colors" href="#">About</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Careers</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Blog</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Contact</a></li>
+                <li>
+                  <a
+                    className="hover:text-primary transition-colors"
+                    href="https://nxtlab-v1.vercel.app/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Company
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="hover:text-primary transition-colors"
+                    href="https://nxtlab-v1.vercel.app/#services"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Services
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="hover:text-primary transition-colors"
+                    href="https://nxtlab-v1.vercel.app/#about"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    About
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="hover:text-primary transition-colors"
+                    href="https://nxtlab-v1.vercel.app/#contact"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Contact
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-bold text-slate-900 dark:text-white mb-6">Support</h4>
               <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
-                <li><a className="hover:text-primary transition-colors" href="#">Help Center</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Documentation</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Security</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Privacy</a></li>
+                <li><Link className="hover:text-primary transition-colors" href="/help">Help Center</Link></li>
+                <li><Link className="hover:text-primary transition-colors" href="/docs">Documentation</Link></li>
+                <li><Link className="hover:text-primary transition-colors" href="/security">Security</Link></li>
+                <li><Link className="hover:text-primary transition-colors" href="/privacy">Privacy</Link></li>
               </ul>
             </div>
           </div>
           <div className="pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
             <p>© 2026 nxtscan. All rights reserved.</p>
             <div className="flex gap-8">
-              <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
-              <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
-              <a className="hover:text-primary transition-colors" href="#">Cookie Settings</a>
+              <Link className="hover:text-primary transition-colors" href="/privacy">Privacy Policy</Link>
+              <Link className="hover:text-primary transition-colors" href="/terms">Terms of Service</Link>
+              <Link className="hover:text-primary transition-colors" href="/cookies">Cookie Settings</Link>
             </div>
           </div>
         </div>
