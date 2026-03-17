@@ -13,24 +13,39 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    const [user, setUser] = useState<{ email?: string } | null>(null)
+    const [user, setUser] = useState<{ id?: string; email?: string } | null>(null)
+    const [plan, setPlan] = useState<'free' | 'pro' | 'agency' | null>(null)
     const [loading, setLoading] = useState(true)
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
     useEffect(() => {
-        const checkUser = async () => {
+        const loadUserAndPlan = async () => {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) {
                 router.push('/login')
-            } else {
-                setUser(user)
+                setLoading(false)
+                return
             }
+
+            setUser(user)
+
+            // Fetch billing / plan metadata from public.users
+            const { data: profile } = await supabase
+                .from('users')
+                .select('plan')
+                .eq('id', user.id)
+                .single()
+
+            if (profile?.plan) {
+                setPlan(profile.plan)
+            }
+
             setLoading(false)
         }
 
-        checkUser()
+        loadUserAndPlan()
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
             (_event, session) => {
@@ -65,6 +80,16 @@ export default function DashboardLayout({
 
     if (!user) return null
 
+    const humanPlan =
+        plan === 'pro' ? 'Professional' : plan === 'agency' ? 'Enterprise' : 'Free'
+
+    const planBadgeClasses =
+        plan === 'pro'
+            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+            : plan === 'agency'
+                ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                : 'bg-slate-700/50 text-slate-200 border-slate-500/40'
+
     const sidebarContent = (
         <>
             <Link href="/" className="mb-12 block">
@@ -78,12 +103,38 @@ export default function DashboardLayout({
                 >
                     <LayoutDashboard className="w-5 h-5" /> Dashboard
                 </Link>
-                <button className="flex items-center w-full gap-3 px-4 py-3 rounded-xl hover:bg-white/5 text-secondary hover:text-primary font-medium transition-colors">
+                <Link
+                    href="/dashboard/settings"
+                    className="flex items-center w-full gap-3 px-4 py-3 rounded-xl hover:bg-white/5 text-secondary hover:text-primary font-medium transition-colors"
+                    onClick={() => setSidebarOpen(false)}
+                >
                     <Settings className="w-5 h-5" /> Settings
-                </button>
+                </Link>
             </div>
 
-            <div className="pt-6 border-t border-white/[0.06] mt-auto">
+            <div className="pt-6 border-t border-white/[0.06] mt-auto space-y-4">
+                <div className="flex items-center justify-between gap-2 px-1">
+                    <div>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-secondary font-semibold">
+                            Current plan
+                        </p>
+                        <div
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-semibold mt-1 ${planBadgeClasses}`}
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {humanPlan}
+                        </div>
+                    </div>
+                    {plan !== 'agency' && (
+                        <Link
+                            href="/#pricing"
+                            className="text-[11px] font-semibold text-brand-300 hover:text-brand-200 underline underline-offset-4"
+                        >
+                            Upgrade
+                        </Link>
+                    )}
+                </div>
+
                 <div className="flex items-center gap-3 mb-4 px-1">
                     <div className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center text-brand-400 text-sm font-bold">
                         {user.email?.[0]?.toUpperCase() || '?'}

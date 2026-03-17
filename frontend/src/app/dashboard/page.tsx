@@ -20,6 +20,7 @@ export default function Dashboard() {
     const [isLoading, setIsLoading] = useState(false)
     const [scanningDomain, setScanningDomain] = useState<string | null>(null)
     const [isAuthLoading, setIsAuthLoading] = useState(true)
+    const [plan, setPlan] = useState<'free' | 'pro' | 'agency' | null>(null)
     const [feedback, setFeedback] = useState<{
         type: 'success' | 'error'
         message: string
@@ -35,6 +36,16 @@ export default function Dashboard() {
             if (!user) {
                 router.replace('/login')
                 return
+            }
+
+            const { data: profile } = await supabase
+                .from('users')
+                .select('plan')
+                .eq('id', user.id)
+                .single()
+
+            if (profile?.plan) {
+                setPlan(profile.plan)
             }
 
             await fetchDomains()
@@ -137,6 +148,9 @@ export default function Dashboard() {
         )
     }
 
+    const humanPlan =
+        plan === 'pro' ? 'Professional' : plan === 'agency' ? 'Enterprise' : 'Free'
+
     return (
         <div className="relative min-h-[90vh] py-8 md:py-12">
             {/* Background Effects */}
@@ -145,7 +159,7 @@ export default function Dashboard() {
             
             <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 flex flex-col">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 md:mb-12">
                     <motion.div 
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -162,6 +176,34 @@ export default function Dashboard() {
                         <p className="text-secondary text-base md:text-lg leading-relaxed">
                             Monitor and protect your infrastructure with continuous AI-driven threat intelligence.
                         </p>
+                    </motion.div>
+
+                    {/* Plan pill / call to action */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.1 }}
+                        className="w-full md:w-auto"
+                    >
+                        <div className="inline-flex items-center gap-3 rounded-2xl bg-slate-900/70 border border-white/10 px-4 py-3 backdrop-blur-xl shadow-lg w-full md:w-auto justify-between md:justify-start">
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex h-6 items-center rounded-full bg-emerald-500/15 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                                    Plan
+                                </span>
+                                <span className="text-sm font-semibold text-primary">
+                                    {humanPlan}
+                                </span>
+                            </div>
+                            {plan !== 'agency' && (
+                                <button
+                                    onClick={() => router.push('/#pricing')}
+                                    className="hidden md:inline-flex items-center gap-1.5 rounded-full border border-brand-500/40 bg-brand-500/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-200 hover:bg-brand-500/25 transition-colors"
+                                >
+                                    <Zap className="w-3 h-3" />
+                                    Upgrade for more scans
+                                </button>
+                            )}
+                        </div>
                     </motion.div>
                 </div>
 

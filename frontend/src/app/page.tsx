@@ -176,10 +176,10 @@ export default function Home() {
               <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">nxtscan</span>
             </div>
             <nav className="hidden md:flex items-center gap-8">
-              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Features</a>
-              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Solutions</a>
-              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Pricing</a>
-              <a className="text-sm font-medium hover:text-primary transition-colors" href="#">Resources</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#features">Features</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#features">Solutions</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#pricing">Pricing</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="#footer">Resources</a>
             </nav>
             <div className="flex items-center gap-4">
               {!user ? (
@@ -378,7 +378,7 @@ export default function Home() {
         </section>
 
         {/* Capabilities Section */}
-        <section className="py-24 bg-slate-50 dark:bg-slate-900/50">
+        <section id="features" className="py-24 bg-slate-50 dark:bg-slate-900/50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-16 max-w-3xl">
               <h2 className="text-primary font-bold tracking-wider uppercase text-sm mb-4">Capabilities</h2>
@@ -400,41 +400,42 @@ export default function Home() {
         </section>
 
         {/* Pricing Section */}
-        <section className="py-24">
+        <section id="pricing" className="py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
               <h2 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white mb-4">Flexible Pricing Plans</h2>
               <p className="text-slate-600 dark:text-slate-400">Choose the perfect plan for your stage of growth.</p>
               {/* Toggle */}
               <div className="mt-8 flex justify-center items-center gap-4">
-                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Monthly</span>
-                <button className="relative w-12 h-6 rounded-full bg-primary/20 transition-colors focus:outline-none">
-                  <span className="absolute left-1 top-1 size-4 bg-primary rounded-full transition-transform translate-x-6"></span>
-                </button>
-                <span className="text-sm font-medium text-slate-900 dark:text-white">Yearly <span className="text-primary font-bold">(Save 20%)</span></span>
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Simple, transparent pricing.</span>
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-inset ring-primary/30">
+                  Open source core, SaaS add‑ons
+                </span>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Basic */}
+              {/* Free */}
               <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Starter</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Free</h3>
                 <div className="flex items-baseline gap-1 mb-6">
                   <span className="text-4xl font-black text-slate-900 dark:text-white">$0</span>
                   <span className="text-slate-500 text-sm">/mo</span>
                 </div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Perfect for freelancers and solo founders starting their journey.</p>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Ideal for testing the platform or running occasional manual scans.</p>
                 <ul className="flex-grow space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> One-off network scans
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> On‑demand scans
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Header analysis
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> SSL & header analysis
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Basic PDF report
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Basic PDF report (EN/AR)
                   </li>
                 </ul>
-                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">Start Scanning</button>
+                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">
+                  Start Free
+                </button>
               </div>
               
               {/* Professional (Featured) */}
@@ -442,50 +443,54 @@ export default function Home() {
                 <div className="absolute top-0 right-8 transform -translate-y-1/2 bg-indigo-400 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Most Popular</div>
                 <h3 className="text-lg font-bold mb-2">Professional</h3>
                 <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black">$49</span>
+                  <span className="text-4xl font-black">$5</span>
                   <span className="text-white/70 text-sm">/mo</span>
                 </div>
-                <p className="text-white/80 text-sm mb-8">Best for growing teams that need automated monitoring and AI insights.</p>
+                <p className="text-white/80 text-sm mb-8">Best for growing teams that need automated monitoring and AI insights on a budget.</p>
                 <ul className="flex-grow space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Automated Weekly Scans
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Automated weekly scans
                   </li>
                   <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> AI-Powered Remediation
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> AI‑powered remediation insights
                   </li>
                   <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Real-time Email Alerts
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Real‑time email alerts
                   </li>
                   <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Complete Scan History
+                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Full scan history for 12 months
                   </li>
                 </ul>
-                <button className="w-full py-3 px-4 rounded-xl bg-white text-primary font-bold hover:bg-slate-50 transition-all shadow-md">Start 14-day Free Trial</button>
+                <button className="w-full py-3 px-4 rounded-xl bg-white text-primary font-bold hover:bg-slate-50 transition-all shadow-md">
+                  Upgrade to Professional
+                </button>
               </div>
               
               {/* Enterprise */}
               <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Enterprise</h3>
                 <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black text-slate-900 dark:text-white">$199</span>
+                  <span className="text-4xl font-black text-slate-900 dark:text-white">$49</span>
                   <span className="text-slate-500 text-sm">/mo</span>
                 </div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Scale your organization with enterprise-grade security and API access.</p>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">For security teams that need advanced reporting, SLAs, and integrations.</p>
                 <ul className="flex-grow space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Everything in Pro
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Everything in Professional
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Unlimited Projects/Domains
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Unlimited projects & domains
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Full API Access
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Full API access & webhooks
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Custom Integrations
+                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Dedicated support & SLAs
                   </li>
                 </ul>
-                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">Contact Sales</button>
+                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">
+                  Talk to Sales
+                </button>
               </div>
             </div>
           </div>
@@ -516,7 +521,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-slate-950 pt-20 pb-10 border-t border-slate-200 dark:border-slate-800 w-full mt-auto">
+      <footer id="footer" className="bg-white dark:bg-slate-950 pt-20 pb-10 border-t border-slate-200 dark:border-slate-800 w-full mt-auto">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-16">
             <div className="col-span-2 lg:col-span-2">

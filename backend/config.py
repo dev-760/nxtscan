@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     shodan_api_key: str = Field(default="", alias="SHODAN_API_KEY")
 
+    # Billing / Stripe (optional but recommended for SaaS)
+    stripe_api_key: str = Field(default="", alias="STRIPE_API_KEY")
+    stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
+    stripe_price_pro_monthly: str = Field(default="", alias="STRIPE_PRICE_PRO_MONTHLY")
+    stripe_price_enterprise_monthly: str = Field(default="", alias="STRIPE_PRICE_ENTERPRISE_MONTHLY")
+
     # Supabase JWT verification
     supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
 

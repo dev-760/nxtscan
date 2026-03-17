@@ -9,7 +9,7 @@ const API_BASE_URL = '/api';
 
 type HttpMethod = 'GET' | 'POST';
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit & { method?: HttpMethod; authToken?: string } = {},
 ): Promise<T> {

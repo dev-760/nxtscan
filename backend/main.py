@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, Depends, status
+from fastapi import FastAPI, HTTPException, Request, Depends, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from celery.result import AsyncResult
@@ -15,6 +15,8 @@ import jwt
 from config import settings
 import models  # noqa: F401 — import triggers SQLModel table registration
 from worker import execute_free_scan, execute_pro_scan, celery_app
+from models import User
+import stripe
 
 logger = logging.getLogger("nextlab.api")
 
@@ -154,6 +156,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Configure Stripe if API key is present
+    if settings.stripe_api_key:
+        stripe.api_key = settings.stripe_api_key
+
     return app
 
 
@@ -228,6 +234,190 @@ def health_check():
         "status": "healthy" if all_ok else "degraded",
         "checks": cached,
     }
+
+
+# ══════════════════════════════════════════════════════════
+#  Billing & Subscription Endpoints (Stripe)
+# ══════════════════════════════════════════════════════════
+
+
+def _ensure_stripe_configured():
+    if not settings.stripe_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Billing is not configured on the server.",
+        )
+
+
+@app.post("/billing/checkout")
+def create_checkout_session(
+    plan: str,
+    user: dict = Depends(get_current_user),
+):
+    """Create a Stripe Checkout session for upgrading plan.
+
+    The frontend passes ?plan=pro or ?plan=enterprise. The user is resolved
+    via the Supabase JWT. When the checkout completes, Stripe will call
+    /billing/webhook where we update the local users.plan field.
+    """
+    _ensure_stripe_configured()
+
+    supabase_user_id = user.get("sub")
+    if not supabase_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not extract user identity from token.",
+        )
+
+    if plan not in {"pro", "enterprise"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid plan. Expected 'pro' or 'enterprise'.",
+        )
+
+    price_id = (
+        settings.stripe_price_pro_monthly
+        if plan == "pro"
+        else settings.stripe_price_enterprise_monthly
+    )
+    if not price_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe price IDs are not configured.",
+        )
+
+    with Session(engine) as db:
+        user_row = db.get(User, supabase_user_id)
+        if not user_row:
+            # Create a shadow user row if not yet present (should be rare,
+            # Supabase trigger normally handles this).
+            user_row = User(id=supabase_user_id, email=user.get("email", ""), plan="free")
+            db.add(user_row)
+            db.commit()
+            db.refresh(user_row)
+
+        # Ensure Stripe customer exists
+        customer_id = user_row.stripe_customer_id
+        if not customer_id:
+            customer = stripe.Customer.create(
+                email=user_row.email,
+                metadata={"supabase_user_id": supabase_user_id},
+            )
+            customer_id = customer["id"]
+            user_row.stripe_customer_id = customer_id
+            db.add(user_row)
+            db.commit()
+
+    try:
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{settings.frontend_url.rstrip('/')}/dashboard?billing=success",
+            cancel_url=f"{settings.frontend_url.rstrip('/')}/dashboard?billing=cancelled",
+            metadata={"supabase_user_id": supabase_user_id, "target_plan": plan},
+        )
+    except Exception as exc:
+        logger.error("Stripe checkout session creation failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create billing session. Please try again later.",
+        )
+
+    return {"url": session.url}
+
+
+@app.post("/billing/portal")
+def create_billing_portal_session(
+    user: dict = Depends(get_current_user),
+):
+    """Create a Stripe Billing Portal session so users can manage payment."""
+    _ensure_stripe_configured()
+
+    supabase_user_id = user.get("sub")
+    if not supabase_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not extract user identity from token.",
+        )
+
+    with Session(engine) as db:
+        user_row = db.get(User, supabase_user_id)
+        if not user_row or not user_row.stripe_customer_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No billing profile found for this user.",
+            )
+
+        try:
+            portal_session = stripe.billing_portal.Session.create(
+                customer=user_row.stripe_customer_id,
+                return_url=f"{settings.frontend_url.rstrip('/')}/dashboard",
+            )
+        except Exception as exc:
+            logger.error("Stripe billing portal session creation failed: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to create billing portal session.",
+            )
+
+    return {"url": portal_session.url}
+
+
+@app.post("/billing/webhook")
+async def stripe_webhook(request: Request, stripe_signature: str = Header(None, alias="Stripe-Signature")):
+    """Stripe webhook handler to sync subscription state into public.users."""
+    _ensure_stripe_configured()
+
+    payload = await request.body()
+    sig_header = stripe_signature
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=payload,
+            sig_header=sig_header,
+            secret=settings.stripe_webhook_secret,
+        )
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Stripe signature.")
+    except Exception as exc:
+        logger.error("Stripe webhook parse failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook error.")
+
+    event_type = event["type"]
+    data = event["data"]["object"]
+
+    # subscription.created / updated / deleted
+    if event_type.startswith("customer.subscription."):
+        customer_id = data.get("customer")
+        status_str = data.get("status")
+        price_id = (data.get("items", {}).get("data") or [{}])[0].get("price", {}).get("id")
+
+        # Map price to internal plan
+        new_plan = "free"
+        if price_id == settings.stripe_price_pro_monthly and status_str in {"trialing", "active"}:
+            new_plan = "pro"
+        elif price_id == settings.stripe_price_enterprise_monthly and status_str in {"trialing", "active"}:
+            new_plan = "agency"  # Enterprise in UI
+
+        with Session(engine) as db:
+            user_row = db.exec(
+                text("SELECT * FROM users WHERE stripe_customer_id = :cid"),
+                {"cid": customer_id},
+            ).first()
+
+            if not user_row:
+                return {"ok": True}
+
+            # sqlmodel row from textual query; reload via Session.get for updates
+            user_model = db.get(User, user_row.id)
+            user_model.plan = new_plan
+            user_model.stripe_subscription_id = data.get("id")
+            user_model.updated_at = _utcnow()
+            db.add(user_model)
+            db.commit()
+
+    return {"received": True}
 
 
 # ══════════════════════════════════════════════════════════
