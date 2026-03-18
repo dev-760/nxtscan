@@ -12,7 +12,7 @@ class User(SQLModel, table=True):
 
     id: Optional[str] = Field(default=None, primary_key=True)  # UUID from Supabase Auth
     email: str = Field(unique=True, index=True)
-    plan: str = Field(default="free")
+    plan: str = Field(default="pro")
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     created_at: datetime = Field(default_factory=_utcnow)

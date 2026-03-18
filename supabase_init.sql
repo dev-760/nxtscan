@@ -19,7 +19,7 @@ CREATE TYPE alert_type AS ENUM ('malware', 'domain_expiring', 'new_port', 'breac
 CREATE TABLE public.users (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    plan plan_type DEFAULT 'free'::plan_type NOT NULL,
+    plan plan_type DEFAULT 'pro'::plan_type NOT NULL,
     stripe_customer_id VARCHAR(255) UNIQUE,
     stripe_subscription_id VARCHAR(255) UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -127,7 +127,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO public.users (id, email, plan)
-    VALUES (new.id, new.email, 'free');
+    VALUES (new.id, new.email, 'pro');
     RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

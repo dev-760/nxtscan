@@ -291,7 +291,7 @@ def create_checkout_session(
         if not user_row:
             # Create a shadow user row if not yet present (should be rare,
             # Supabase trigger normally handles this).
-            user_row = User(id=supabase_user_id, email=user.get("email", ""), plan="free")
+            user_row = User(id=supabase_user_id, email=user.get("email", ""), plan="pro")
             db.add(user_row)
             db.commit()
             db.refresh(user_row)
@@ -394,7 +394,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None, 
         price_id = (data.get("items", {}).get("data") or [{}])[0].get("price", {}).get("id")
 
         # Map price to internal plan
-        new_plan = "free"
+        new_plan = "pro"
         if price_id == settings.stripe_price_pro_monthly and status_str in {"trialing", "active"}:
             new_plan = "pro"
         elif price_id == settings.stripe_price_enterprise_monthly and status_str in {"trialing", "active"}:

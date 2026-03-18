@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Shield,
   Zap,
@@ -72,25 +73,11 @@ interface ScanResultViewModel {
 
 export default function Home() {
   const [scanUrl, setScanUrl] = useState('');
-  const [scanResult, setScanResult] = useState<ScanResultViewModel | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanStep, setScanStep] = useState(0);
-  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
-  const scanStepRef = useRef<NodeJS.Timeout | null>(null);
+  const router = useRouter();
   const scanInputRef = useRef<HTMLInputElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (scanStepRef.current) clearInterval(scanStepRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -106,60 +93,12 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
 
-  const handleScan = async (e: FormEvent) => {
+  const handleScan = (e: FormEvent) => {
     e.preventDefault();
     if (!scanUrl) return;
-    setIsScanning(true);
-    setScanResult(null);
-    setShowDownloadPrompt(false);
-    setScanError(null);
-    setScanStep(0);
-
-    scanStepRef.current = setInterval(() => {
-      setScanStep((prev) => (prev < scanSteps.length - 1 ? prev + 1 : prev));
-    }, 4000);
-
-    try {
-      const domain = normalizeDomain(scanUrl);
-      const start = await startFreeScan(domain);
-
-      if (!start.task_id) throw new Error('Could not start scan.');
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const pollData = await pollScan(start.task_id);
-
-          if (pollData.status === 'completed' && pollData.result) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            if (scanStepRef.current) clearInterval(scanStepRef.current);
-            setIsScanning(false);
-            setScanResult({ ...pollData.result, task_id: start.task_id });
-            setShowDownloadPrompt(true);
-            setTimeout(() => {
-              resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 300);
-          } else if (pollData.status === 'failed') {
-            if (pollRef.current) clearInterval(pollRef.current);
-            if (scanStepRef.current) clearInterval(scanStepRef.current);
-            setIsScanning(false);
-            setScanError('Scan failed: ' + (pollData.error ?? 'Unknown error'));
-          }
-        } catch {
-          if (pollRef.current) clearInterval(pollRef.current);
-          if (scanStepRef.current) clearInterval(scanStepRef.current);
-          setIsScanning(false);
-          setScanError('Error polling scan status.');
-        }
-      }, 3000);
-    } catch (err) {
-      if (scanStepRef.current) clearInterval(scanStepRef.current);
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to trigger scan. Is the backend running?';
-      setIsScanning(false);
-      setScanError(message);
-    }
+    
+    // Navigate to the dedicated scan results page
+    router.push(`/scan?domain=${encodeURIComponent(scanUrl)}`);
   };
 
   return (
@@ -181,7 +120,7 @@ export default function Home() {
             <nav className="hidden md:flex items-center gap-8">
               <a className="text-sm font-medium hover:text-primary transition-colors" href="#features">Features</a>
               <a className="text-sm font-medium hover:text-primary transition-colors" href="#features">Solutions</a>
-              <a className="text-sm font-medium hover:text-primary transition-colors" href="#pricing">Pricing</a>
+              <a className="text-sm font-medium hover:text-primary transition-colors" href="https://github.com/nxtscan" target="_blank" rel="noreferrer">GitHub</a>
               <a className="text-sm font-medium hover:text-primary transition-colors" href="#footer">Resources</a>
             </nav>
             <div className="flex items-center gap-4">
@@ -236,24 +175,18 @@ export default function Home() {
                         onChange={(e) => setScanUrl(e.target.value)}
                         className="block w-full pl-10 pr-3 py-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm sm:text-lg h-14"
                         placeholder="Enter your domain (e.g. example.com)"
-                        disabled={isScanning}
                         required
                       />
                     </div>
                     <button
                       type="submit"
-                      disabled={isScanning}
                       className="h-14 px-8 rounded-xl bg-primary text-white font-bold text-lg shadow-lg hover:translate-y-[-1px] transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                      {isScanning ? (
-                        <><Activity className="w-5 h-5 animate-spin" /> Scanning</>
-                      ) : (
-                        <><Shield className="w-5 h-5" /> Free Scan</>
-                      )}
+                      <Shield className="w-5 h-5" /> Free Scan
                     </button>
                   </form>
                   <p className="mt-3 text-sm text-slate-500 flex items-center gap-2">
-                    <Lock className="w-3 h-3" /> No credit card required. Results in <span className="font-semibold text-slate-700 dark:text-slate-300">seconds</span>.
+                    <Lock className="w-3 h-3" /> 100% Free & Open Source. Results in <span className="font-semibold text-slate-700 dark:text-slate-300">seconds</span>.
                   </p>
                 </div>
 
@@ -270,77 +203,7 @@ export default function Home() {
               <div className="relative">
                 <div className="aspect-[4/3] rounded-2xl bg-gradient-to-tr from-primary/20 to-purple-500/10 shadow-2xl ring-1 ring-slate-200 dark:ring-slate-800 overflow-hidden flex flex-col pt-8">
                   <div className="w-full flex-grow bg-slate-100 dark:bg-slate-900 relative rounded-t-xl mx-8 px-6 pt-6 border-x border-t border-slate-200 dark:border-slate-800 text-left">
-                    {/* Dynamic View based on Scan status */}
-                    {isScanning ? (
-                      <div className="flex flex-col h-full items-center justify-center -mt-6">
-                        <Activity className="w-12 h-12 text-primary animate-spin mb-4" />
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Scanning {scanUrl || 'Domain'}</h3>
-                        <div className="space-y-3 w-full max-w-sm">
-                          {scanSteps.map((step, i) => (
-                            <div key={i} className="flex items-center gap-3 bg-white dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800 shadow-sm">
-                              {i < scanStep ? (
-                                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                              ) : i === scanStep ? (
-                                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full border-2 border-slate-200 dark:border-slate-700" />
-                              )}
-                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{step}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : scanError ? (
-                      <div className="flex flex-col h-full items-center justify-center p-6 text-center text-red-600 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-900">
-                        <Shield className="w-12 h-12 mb-4" />
-                        <h3 className="text-xl font-bold mb-2">Scan Failed</h3>
-                        <p>{scanError}</p>
-                      </div>
-                    ) : scanResult ? (
-                      <div ref={resultsRef} className="h-full overflow-y-auto no-scrollbar pb-6 scroll-mt-24">
-                        <div className="flex items-center gap-3 mb-6">
-                          <ShieldCheck className="w-8 h-8 text-emerald-500" />
-                          <div>
-                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scan Complete</h2>
-                            <p className="text-sm font-mono text-slate-500">{scanResult.domain}</p>
-                          </div>
-                        </div>
-                        {/* AI Remediation */}
-                        <div className="mb-6 bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-                          <h4 className="flex items-center gap-2 text-primary font-bold text-sm mb-2"><Sparkles className="w-4 h-4" /> AI Remediation</h4>
-                          <p className="text-sm text-slate-600 dark:text-slate-400 max-h-32 overflow-y-auto pr-2">{scanResult.ai_remediation}</p>
-                        </div>
-                        {/* Checks */}
-                        <div className="grid gap-3 pb-6">
-                          {scanResult.scan_data?.slice(0, 3).map((check, i) => (
-                            <div key={i} className="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="font-semibold text-slate-900 dark:text-white text-sm">{check.check_name}</span>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                  check.status === 'pass' ? 'bg-emerald-100 text-emerald-700' : check.status === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                }`}>{check.status}</span>
-                              </div>
-                              <p className="text-xs text-slate-500 truncate">{check.detail}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {showDownloadPrompt && (
-                          <div className="mt-2 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Want the full bilingual PDF report with all checks and remediation details?
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => window.open(getScanPdfUrl(scanResult.task_id), '_blank', 'noopener,noreferrer')}
-                              className="w-full bg-primary text-white text-sm font-bold py-2.5 px-4 rounded-lg shadow inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
-                            >
-                              <FileCheck className="w-4 h-4"/> Download full report
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      // Abstract Dashboard Representation (Original design)
+                    {/* Abstract Dashboard Representation (Original design) */}
                       <div className="w-full h-full relative">
                         <div className="flex gap-4 mb-8">
                           <div className="h-8 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
@@ -365,7 +228,6 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
-                    )}
                   </div>
                 </div>
                 
@@ -411,102 +273,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pricing Section */}
-        <section id="pricing" className="py-24">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white mb-4">Flexible Pricing Plans</h2>
-              <p className="text-slate-600 dark:text-slate-400">Choose the perfect plan for your stage of growth.</p>
-              {/* Toggle */}
-              <div className="mt-8 flex justify-center items-center gap-4">
-                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Simple, transparent pricing.</span>
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-inset ring-primary/30">
-                  Open source core, SaaS add‑ons
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Free */}
-              <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Free</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black text-slate-900 dark:text-white">$0</span>
-                  <span className="text-slate-500 text-sm">/mo</span>
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">Ideal for testing the platform or running occasional manual scans.</p>
-                <ul className="flex-grow space-y-4 mb-8">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> On‑demand scans
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> SSL & header analysis
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Basic PDF report (EN/AR)
-                  </li>
-                </ul>
-                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">
-                  Start Free
-                </button>
-              </div>
-              
-              {/* Professional (Featured) */}
-              <div className="flex flex-col p-8 rounded-2xl bg-primary text-white shadow-xl relative scale-105 z-10">
-                <div className="absolute top-0 right-8 transform -translate-y-1/2 bg-indigo-400 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Most Popular</div>
-                <h3 className="text-lg font-bold mb-2">Professional</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black">$5</span>
-                  <span className="text-white/70 text-sm">/mo</span>
-                </div>
-                <p className="text-white/80 text-sm mb-8">Best for growing teams that need automated monitoring and AI insights on a budget.</p>
-                <ul className="flex-grow space-y-4 mb-8">
-                  <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Automated weekly scans
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> AI‑powered remediation insights
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Real‑time email alerts
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-white/90">
-                    <CheckCircle2 className="text-white w-5 h-5 flex-shrink-0" /> Full scan history for 12 months
-                  </li>
-                </ul>
-                <button className="w-full py-3 px-4 rounded-xl bg-white text-primary font-bold hover:bg-slate-50 transition-all shadow-md">
-                  Upgrade to Professional
-                </button>
-              </div>
-              
-              {/* Enterprise */}
-              <div className="flex flex-col p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Enterprise</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black text-slate-900 dark:text-white">$49</span>
-                  <span className="text-slate-500 text-sm">/mo</span>
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">For security teams that need advanced reporting, SLAs, and integrations.</p>
-                <ul className="flex-grow space-y-4 mb-8">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Everything in Professional
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Unlimited projects & domains
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Full API access & webhooks
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                    <CheckCircle2 className="text-primary w-5 h-5 flex-shrink-0" /> Dedicated support & SLAs
-                  </li>
-                </ul>
-                <button className="w-full py-3 px-4 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition-colors">
-                  Talk to Sales
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+
 
         {/* Final CTA Section */}
         <section className="py-20">
@@ -563,7 +330,7 @@ export default function Home() {
               <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
                 <li><a className="hover:text-primary transition-colors" href="#features">Features</a></li>
                 <li><a className="hover:text-primary transition-colors" href="#features">Integrations</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#pricing">Pricing</a></li>
+                <li><a className="hover:text-primary transition-colors" href="https://github.com/nxtscan" target="_blank" rel="noreferrer">GitHub</a></li>
                 <li><Link className="hover:text-primary transition-colors" href="/changelog">Changelog</Link></li>
               </ul>
             </div>
